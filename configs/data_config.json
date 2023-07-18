@@ -1,0 +1,8 @@
+{
+  "statics2011": {
+    "dpath":"../data/statics2011",
+    "num_q": 0,
+    "num_c": 1223,
+    "input_type": ["concepts"]
+  }
+}
