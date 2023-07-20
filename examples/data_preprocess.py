@@ -2,7 +2,7 @@ import argparse
 import sys
 sys.path.append('/Users/youh/PycharmProjects/PYKT_copy')
 from pykt.preprocess.data_proprocess import process_raw_data
-
+from pykt.preprocess.split_datasets import main as split_concept
 
 # 定义数据存储路径
 dname2paths = {
@@ -32,3 +32,7 @@ if __name__ == '__main__':
     dname, writef = process_raw_data(args.dataset_name, dname2paths)
     print("-" * 50)
     print(f"dname: {dname}, writef: {writef}")
+
+    # for concept level model
+    split_concept(dname, writef, args.dataset_name, config_data, args.min_seq_len, args.maxlen, args.kfold)
+
