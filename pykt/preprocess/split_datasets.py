@@ -117,22 +117,14 @@ def read_data(fname, min_seq_len=3, response_set=[0, 1]):
 def get_max_concepts(total_df):
         """
         找出 DataFrame 中 "concepts" 列的值被逗号和下划线分割后得到的最大子字符串数量。(statics2011=1)
-        :param total_df:
-        :return:max_concepts
+        :param total_df: 输入的 DataFrame
+        :return:max_concepts： 最大的子字符串数量
         """
         max_concepts = 1
-        for i, row in total_df.iterrows():  # 遍历一个df
-            cs = row["concepts"].split(",")
-            max_length = 0
-            for c in cs:
-                length = len(c.split("_"))
-                if length > max_length:
-                    max_length = length
-            num_concepts = max_length
-
-            if num_concepts > max_concepts:
-                max_concepts = num_concepts
-            return max_concepts
+        for concepts in total_df["concepts"]:  # 从DataFrame提取出"concepts"列的每个元素
+            for c in concepts.split(","):  # 将每个元素按逗号分割
+                max_concepts = max(max_concepts, len(c.split("_")))  # 计算每个概念被下划线分割后得到的子字符串数量，并更新最大值
+        return max_concepts
 
 
 def calStatistics(df, stares, key):
