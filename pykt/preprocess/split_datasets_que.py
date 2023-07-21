@@ -1,6 +1,10 @@
+import os.path
+
+import numpy as np
 import pandas as pd
 
-from pykt.preprocess.split_datasets import read_data, get_max_concepts, calStatistics
+from pykt.preprocess.split_datasets import read_data, get_max_concepts, calStatistics, save_id2idx, ALL_KEYS, \
+    train_test_split, KFold_split, save_dcur, ONE_KEYS, write_config
 
 
 def id_mapping_que(df):
@@ -42,6 +46,94 @@ def id_mapping_que(df):
     # 返回新的 DataFrame 和字典`dkeyid2idx`
     return finaldf,dkeyid2idx
 
+
+def generate_sequences(df, effective_keys, min_seq_len=3, maxlen=200,pad_val = -1):
+    save_keys = list(effective_keys) + ["selectmasks"]
+    dres = {"selectmasks":[]}
+    dropnum = 0
+    for i,row in df.iterrows():
+        dcur = save_dcur(row,effective_keys)
+
+        rest, lenrs = len(dcur["response"]),len(dcur["responses"])
+        j = 0
+        while lenrs >= j + maxlen:
+            rest = rest - (maxlen)
+            for key in effective_keys:
+                dres.setdefault(key, [])
+                if key not in ONE_KEYS:
+                    dres[key].append(",".join(dcur[key][j: j + maxlen]))  # [str(k) for k in dcur[key][j: j + maxlen]]))
+                else:
+                    dres[key].append(dcur[key])
+            dres["selectmasks"].append(",".join(["1"]*maxlen))
+
+            j+=maxlen
+
+        if rest < min_seq_len: # delete sequence len less than min_seq_len
+            dropnum += rest
+            continue
+
+        pad_dim = maxlen - rest
+        for key in effective_keys:
+            dres.setdefault(key, [])
+            if key not in ONE_KEYS:
+                paded_info = np.concatenate([dcur[key][j:], np.array([pad_val] * pad_dim)])
+                dres[key].append(",".join([str(k) for k in paded_info]))
+            else:
+                dres[key].append(dcur[key])
+        dres["selectmasks"].append(",".join(["1"]*rest + [str(pad_val)]* pad_dim))
+
+    # after preprocess data,report
+    dfinal = dict()
+    for key in ALL_KEYS:
+        if key in save_keys:
+            dfinal[key] = dres[key]
+    finaldf = pd.DataFrame(dfinal)
+    print(f"dropnum: {dropnum}")
+    return finaldf
+
+
+def generate_window_sequences(df, effective_keys, maxlen=200, pad_val=-1):
+    save_keys = list(effective_keys) + ["selectmasks"]
+    dres = {"selectmasks": []}
+    for i, row in df.iterrows():
+        dcur = save_dcur(row, effective_keys)
+        lenrs = len(dcur["responses"])
+        if lenrs > maxlen:
+            for key in effective_keys:
+                dres.setdefault(key, [])
+                if key not in ONE_KEYS:
+                    dres[key].append(",".join(dcur[key][0: maxlen]))  # [str(k) for k in dcur[key][0: maxlen]]))
+                else:
+                    dres[key].append(dcur[key])
+            dres["selectmasks"].append(",".join(["1"] * maxlen))
+            for j in range(maxlen + 1, lenrs + 1):
+                for key in effective_keys:
+                    dres.setdefault(key, [])
+                    if key not in ONE_KEYS:
+                        dres[key].append(",".join([str(k) for k in dcur[key][j - maxlen: j]]))
+                    else:
+                        dres[key].append(dcur[key])
+                dres["selectmasks"].append(",".join([str(pad_val)] * (maxlen - 1) + ["1"]))
+        else:
+            for key in effective_keys:
+                dres.setdefault(key, [])
+                if key not in ONE_KEYS:
+                    pad_dim = maxlen - lenrs
+                    paded_info = np.concatenate([dcur[key][0:], np.array([pad_val] * pad_dim)])
+                    dres[key].append(",".join([str(k) for k in paded_info]))
+                else:
+                    dres[key].append(dcur[key])
+            dres["selectmasks"].append(",".join(["1"] * lenrs + [str(pad_val)] * pad_dim))
+
+    dfinal = dict()
+    for key in ALL_KEYS:
+        if key in save_keys:
+            # print(f"key: {key}, len: {len(dres[key])}")
+            dfinal[key] = dres[key]
+    finaldf = pd.DataFrame(dfinal)
+    return finaldf
+
+
 def main(dname, fname, dataset_name, configf, min_seq_len=3, maxlen = 200, kfold=5):
     """
 
@@ -75,4 +167,61 @@ def main(dname, fname, dataset_name, configf, min_seq_len=3, maxlen = 200, kfold
 
     # just for id map
     total_df, dkeyid2idx = id_mapping_que(total_df)
+    dkeyid2idx["max_concepts"] = max_concepts
 
+    save_id2idx(dkeyid2idx, os.path.join(dname, "keyid2idx.json")) # 新的DataFrame和一个字典dkeyid2idx（用于保存每个标签对应的唯一数值ID
+    effective_keys.add("folds")
+
+    # ALL_KEYS的列表中的每个键是否在effective_keys中
+    df_save_keys = []
+    for key in ALL_KEYS:
+        if key in effective_keys:
+            df_save_keys.append(key)
+
+    # train test split
+    train_df, test_df = train_test_split(total_df, 0.2)
+    splitdf = KFold_split(train_df, kfold)
+    splitdf[df_save_keys].to_csv(os.path.join(dname, "train_valid_question.csv"),index=None)
+    ins, ss, qs, cs, seqnum = calStatistics(splitdf, stares, "original train+valid question level")
+    print(f"train+valid original interactions num: {ins}, select num: {ss}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
+
+    # generate sequences
+    split_seqs = generate_sequences(splitdf, effective_keys, min_seq_len, maxlen)
+    ins,ss,qs,cs,seqnum = calStatistics(split_seqs, stares,"train+valid sequences question level")
+    print(f"train+valid sequences interactions num: {ins}, select num: {ss}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
+    # split_seqs.to_csv(os.path.join(dname, "train_valid_sequences_quelevel.csv"), index=None)
+
+    # for test dataset
+    # add default fold -1 to test
+    test_df["fold"] = [-1] *test_df.shape[0]
+    test_seqs = generate_sequences(test_df, list(effective_keys),min_seq_len,maxlen)
+    # dispaly
+    ins, ss, qs, cs, seqnum = calStatistics(test_df, stares, "test original question level")
+    print(f"original test interactions num: {ins}, select num: {ss}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
+    ins, ss, qs, cs, seqnum = calStatistics(test_seqs, stares, "test sequences question level")
+    print(f"test sequences interactions num: {ins}, select num: {ss}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
+    print("=" * 20)
+
+    test_window_seqs = generate_window_sequences(test_df,list(effective_keys),maxlen)
+    ins, ss, qs, cs, seqnum = calStatistics(test_window_seqs, stares, "test window question level")
+    print(f"test window interactions num: {ins}, select num: {ss}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
+
+    # sava csv
+    test_df.to_csv(os.path.join(dname, "test_quelevel.csv"), index=None)
+    test_seqs.to_csv(os.path.join(dname, "test_sequences_quelevel.csv"), index=None)
+    test_window_seqs.to_csv(os.path.join(dname, "test_window_sequences_quelevel.csv"), index=None)
+
+    other_config = {
+        "train_valid_original_file_quelevel":"train_valid_quelevel.csv",
+        "train_valid_file_quelevel": "train_valid_sequences_quelevel.csv",
+        "test_original_file_quelevel": "test_quelevel.csv",
+        "test_file_quelevel": "test_sequences_quelevel.csv",
+        "test_window_file_quelevel": "test_window_sequences_quelevel.csv"
+    }
+
+    write_config(dataset_name=dataset_name, dkeyid2idx = dkeyid2idx,effective_keys=effective_keys,
+                 configf=configf,dpath=dname, k= kfold, min_seq_len=min_seq_len,maxlen=maxlen,
+                 other_config=other_config)
+
+    print("="*20)
+    print("\n".join(stares))
