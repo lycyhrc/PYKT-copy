@@ -128,16 +128,41 @@ def get_max_concepts(total_df):
 
 
 def calStatistics(df, stares, key):
-        allin, allselect = 0, 0
-        allqs, allcs = set(), set()
+        """
+       从输入的 DataFrame (df) 中，统计并返回以下信息：
+
+       - 有效响应的数量 (allin)：计算 'responses' 列中不为 '-1' 的响应总数。
+       - 有效选择的数量 (allselect)：计算 'selectmasks' 列中为 '1' 的选择总数。
+       - 唯一问题的数量：计算 'questions' 列中不重复（唯一）且不为 '-1' 的问题总数。
+       - 唯一概念的数量：计算 'concepts' 列中不重复（唯一）且不为 '-1' 的概念总数。
+       - DataFrame 的行数：即数据集中的总记录数量。
+
+       上述所有统计信息都以逗号分隔的字符串形式，添加到输入的 stares 列表中。
+
+       函数返回这些统计信息的数值形式，按顺序为：有效响应的数量，有效选择的数量，唯一问题的数量，唯一概念的数量，以及 DataFrame 的行数。
+
+       :param df: 输入的 DataFrame，要从中进行统计的数据集。
+       :param stares: 输入的列表，用于保存统计信息的字符串形式。
+       :param key: 用于标识当前处理的数据集的关键字。
+       :return: 返回一个包含五个元素的元组，分别为有效响应的数量，有效选择的数量，唯一问题的数量，唯一概念的数量，以及 DataFrame 的行数。
+       """
+        # 初始化所有统计量
+        allin, allselect = 0, 0  # 有效响应次数，有效选择次数
+        allqs, allcs = set(), set() # 不同问题数量，不同概念数量
+        # 遍历 DataFrame的每一行
         for i, row in df.iterrows():
+            # 如果存在'responses'列，统计有效的响应次数（即不为'-1'的响应）
             rs = row["responses"].split(",")
             curlen = len(rs) - rs.count("-1")
             allin += curlen
+
+            # 如果存在'selectmasks'列，统计有效的选择次数（即为'1'的选择）
             if "selectmasks" in row:
                 ss = row["selectmasks"].split(",")
                 slen = ss.count("1")
                 allselect += slen
+
+            # 如果存在'concepts'列，统计唯一的概念数（即不为'-1'的概念）
             if "concepts" in row:
                 cs = row["concepts"].split(",")
                 fc = list()
@@ -145,13 +170,16 @@ def calStatistics(df, stares, key):
                     cc = c.split("_")
                     fc.extend(cc)
                 curcs = set(fc) - {"-1"}
-                allcs |= curcs
+                allcs |= curcs  # 将 curcs 中的所有元素添加到 allcs 中，这就完成了两个集合的并集操作
+
+            # 如果存在'questions'列，统计唯一的问题数（即不为'-1'的问题）
             if "questions" in row:
                 qs = row["questions"].split(",")
                 curqs = set(qs) - {"-1"}
                 allqs |= curqs
-        stares.append(",".join([str(s)
-                                for s in [key, allin, df.shape[0], allselect]]))
+
+        # 将统计结果添加到 stares 列表中
+        stares.append(",".join([str(s) for s in [key, allin, df.shape[0], allselect]])) # 四个值转换为字符串并用 , 连接，然后添加到stares列表的末尾
         return allin, allselect, len(allqs), len(allcs), df.shape[0]
 
 
@@ -570,8 +598,7 @@ def main(dname, fname, dataset_name, config_data, min_seq_len=3, maxlen=200, kfo
 
         oris, _, qs, cs, seqnum = calStatistics(total_df, stares, "original")
         print("=" * 20)
-        print(
-            f"original total interactions: {oris}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
+        print(f"original total interactions: {oris}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
 
         total_df, effective_keys = extend_multi_concepts(total_df, effective_keys)
         total_df, dkeyid2idx = id_mapping(total_df)
@@ -647,6 +674,6 @@ def main(dname, fname, dataset_name, config_data, min_seq_len=3, maxlen=200, kfo
 
         write_config(dataset_name=dataset_name, dkeyid2idx = dkeyid2idx, effective_keys=effective_keys,
                      config=config,dpath=dname,k=kfold,min_seq_len=min_seq_len,maxlen=maxlen,flag=flag)
-        
+
         print("="*20)
         print("\n".join(stares))
