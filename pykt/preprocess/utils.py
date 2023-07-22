@@ -81,3 +81,12 @@ def set_seed(seed):
     import os
     os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
+
+import datetime
+def get_now_time():
+    now = datetime.datetime.now()
+    dt_string = now.strftime("%Y-%m-%d %H:%M:%S")
+    return dt_string
+
+def debug_print(text, fuc_name=""):
+    print(f"{get_now_time()} - {fuc_name} - said: {text}")
