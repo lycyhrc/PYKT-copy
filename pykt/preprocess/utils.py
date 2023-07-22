@@ -55,3 +55,29 @@ def write_text(file, stu_data):
         for data in stu_data:
             for d in data:
                 f.write(",".join(d) +"\n")
+
+def set_seed(seed):
+    """Set the global random seed.
+
+        Args:
+            seed (int): random seed
+    """
+    try:
+        import  torch
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed(seed)
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
+    except:
+        print("Set seed failed, detail are ",e)
+        pass
+
+    import numpy as np
+    np.random.seed(seed)
+    import random as python_random
+    python_random.seed(seed)
+    # cuda env
+    import os
+    os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
