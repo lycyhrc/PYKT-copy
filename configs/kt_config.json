@@ -1,0 +1,8 @@
+{
+  "train_config": {
+    "batch_size": 256,
+    "num_epochs": 200,
+    "optimizer": "adam",
+    "seq_len": 200
+  }
+}
