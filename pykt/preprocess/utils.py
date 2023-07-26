@@ -1,6 +1,5 @@
-from datetime import datetime
 import time
-
+import datetime
 
 def sta_infos(df, keys, stares, split_str="_"):
     """
@@ -42,9 +41,26 @@ def replace_text(text):
     text = text.replace("_","####").replace(",","@@@@")
     return text
 
-def change2timestamp(t):
-    datetime_obj = datetime.strptime(t, "%Y/%m/%d %H:%M")
-    timeStamp = int(time.mktime(datetime_obj.timetuple()) * 1000.0 + datetime_obj.microsecond / 1000.0)
+from datetime import datetime
+def change2timestamp(t,hasf = True):
+    """
+       这个函数将日期时间的字符串表示形式转换为Unix时间戳（毫秒）。
+
+       参数:
+       t (str): 日期时间的字符串表示形式。
+       hasf (bool): 一个标志，表示日期时间字符串是否包含小数秒。
+                    默认值为True，表示函数预期会有小数秒。
+
+       返回值:
+       float: 代表输入日期时间的Unix时间戳（毫秒）。
+       """
+    if hasf:
+        try:
+            timeStamp = datetime.datetime.strptime(t, "%Y-%m-%d %H:%M:%S.%f").timestamp() * 1000
+        except ValueError:
+            timeStamp = datetime.datetime.strptime(t, "%Y/%m/%d %H:%M").timestamp() * 1000
+    else:
+        timeStamp = datetime.strptime(t, "%Y/%m/%d %H:%M").timestamp() * 1000
     return timeStamp
 
 def format_list2str(input_list):
