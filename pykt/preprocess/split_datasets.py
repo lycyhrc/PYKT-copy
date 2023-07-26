@@ -7,7 +7,7 @@ import pandas as pd
 
 ALL_KEYS = ["fold", "uid", "questions", "concepts", "responses", "timestamps",
                 "usetimes", "selectmasks", "is_repeat", "qidxs", "rest", "orirow", "cidxs"]
-
+ONE_KEYS = ["fold", "uid"]
 
 def read_data(fname, min_seq_len=3, response_set=[0, 1]):
         """
@@ -184,9 +184,38 @@ def calStatistics(df, stares, key):
 
 
 def extend_multi_concepts(df, effective_keys):
-        if "questions" not in effective_keys or "concepts" not in effective_keys:
-            print("has no questions or concepts! return original.")
-            return df, effective_keys
+    if "questions" not in effective_keys or "concepts" not in effective_keys:
+        print("has no questions or concepts! return original.")
+        return df, effective_keys
+    extend_keys = set(df.columns) - {"uid"}
+
+    dres = {"uid": df["uid"]}
+    for _, row in df.iterrows():
+        dextend_infos = dict()
+        for key in extend_keys:
+            dextend_infos[key] = row[key].split(",")
+        dextend_res = dict()
+        for i in range(len(dextend_infos["questions"])):
+            dextend_res.setdefault("is_repeat", [])
+            if dextend_infos["concepts"][i].find("_") != -1:
+                ids = dextend_infos["concepts"][i].split("_")
+                dextend_res.setdefault("concepts", [])
+                dextend_res["concepts"].extend(ids)
+                for key in extend_keys:
+                    if key != "concepts":
+                        dextend_res.setdefault(key, [])
+                        dextend_res[key].extend(
+                            [dextend_infos[key][i]] * len(ids))
+                dextend_res["is_repeat"].extend(
+                    ["0"] + ["1"] * (len(ids) - 1))  # 1: repeat, 0: original
+            else:
+                for key in extend_keys:
+                    dextend_res.setdefault(key, [])
+                    dextend_res[key].append(dextend_infos[key][i])
+                dextend_res["is_repeat"].append("0")
+        for key in dextend_res:
+            dres.setdefault(key, [])
+            dres[key].append(",".join(dextend_res[key]))
 
 
 def id_mapping(df):
@@ -217,8 +246,9 @@ def id_mapping(df):
         return finaldf, dkeyid2idx
 
 
-def save_id2idx(dkeyid2idx, param):
-        pass
+def save_id2idx(dkeyid2idx, save_path):
+    with open(save_path, "w+") as fout:
+        fout.write(json.dumps(dkeyid2idx))
 
 
 def train_test_split(df, test_ratio=0.2):
@@ -239,34 +269,28 @@ def train_test_split(df, test_ratio=0.2):
         return train_df, test_df
 
 
-def KFold_split(train_df, k=5):
-        """
-        为 k 折交叉验证（k-fold cross-validation）提供数据
-        :param train_df:
-        :param k:
-        :return:
-        """
-        df = train_df.sample(frac=1.0, random_state=1024)
-        datanum = df.shape[0]
-        test_ratio = 1 / k
-        test_num = int(datanum * test_ratio)
-        rest = datanum % k  # k折划分不完全的数据
+def KFold_split(df, k=5):
+    df = df.sample(frac=1.0, random_state=1024)
+    datanum = df.shape[0]
+    test_ratio = 1 / k
+    test_num = int(datanum * test_ratio)
+    rest = datanum % k
 
-        start = 0
-        folds = []
-        for i in range(0, k):
-            end = start + test_num + (i < rest)  # 简单写法：i < rest 判断是否需要给当前的子集添加一个额外的元素
-            folds.extend([i] * (end - start))
-            print(f"fold: {i + 1}, start: {start}, end: {end}, total num: {datanum}")
-            start = end
-        # report
-        finaldf = copy.deepcopy(df)
-        finaldf["fold"] = folds  # 在 finaldf 中添加一个新的列 "fold"，其值为 folds
-        return finaldf
-
-
-ONE_KEYS = ["fold", "uid"]
-
+    start = 0
+    folds = []
+    for i in range(0, k):
+        if rest > 0:
+            end = start + test_num + 1
+            rest -= 1
+        else:
+            end = start + test_num
+        folds.extend([i] * (end - start))
+        print(f"fold: {i+1}, start: {start}, end: {end}, total num: {datanum}")
+        start = end
+    # report
+    finaldf = copy.deepcopy(df)
+    finaldf["fold"] = folds
+    return finaldf
 
 def save_dcur(row, effective_keys):
         """
@@ -279,6 +303,7 @@ def save_dcur(row, effective_keys):
         dcur = dict()
         for key in effective_keys:
             if key not in ONE_KEYS:
+                # [int(i) for i in row[key].split(",")]
                 dcur[key] = row[key].split(",")
             else:
                 dcur[key] = row[key]
@@ -414,6 +439,9 @@ def add_qidx(dcur, global_qidx):
         if str(r) =='0':
             global_qidx = global_qidx + 1
         idxs.append(global_qidx)
+    for i in range(0, len(idxs)):
+        rests.append(idxs[i + 1:].count(idxs[i]))
+    return idxs, rests, global_qidx
 
 
 def expand_question(dcur, global_qidx, pad_val = -1):
@@ -459,85 +487,85 @@ def generate_question_sequences(df, effective_keys, window=True, min_seq_len=3, 
     if "questions" not in effective_keys or "concepts" not in effective_keys:
         print(f"has no questions or concepts, has no question sequences")
         return False,None
-        save_keys = list(effective_keys) + ["selectmasks","qidxs","rest","orirow"]
-        dres = {}
-        global_qidx = -1
-        df["index"] = list(range(0, df.shape[0]))
-        for i,row in df.iterrows():
-            dcur = save_dcur(row,effective_keys)
-            dcur["orirow"] = [row["index"]] * len(dcur["responses"])
+    save_keys = list(effective_keys) + ["selectmasks","qidxs","rest","orirow"]
+    dres = {}
+    global_qidx = -1
+    df["index"] = list(range(0, df.shape[0]))
+    for i,row in df.iterrows():
+        dcur = save_dcur(row,effective_keys)
+        dcur["orirow"] = [row["index"]] * len(dcur["responses"])
 
-            dexpand,global_qidx = expand_question(dcur,global_qidx)
-            seq_num = len(dexpand["responses"])
-            for j in range(seq_num):
-                curlen = len(dexpand["responses"][j])
-                if curlen < 2: # 不预测第1个题
-                    continue
-                if curlen < maxlen:
-                    for key in dexpand:
-                        pad_dim = maxlen - curlen
-                        paded_info = np.concatenate([dexpand[key][j][0:],np.array([pad_val] * pad_dim)])
-                        dres.setdefault(key,[])
-                        dres[key].append(",".join([str(k) for k in paded_info]))
-                    for key in ONE_KEYS:
-                        dres.setdefault(key,[])
-                        dres[key].append(dcur[key])
-                else:
-                    # 超出范围设置window
-                    if window:
-                        if dexpand["selectmasks"][j][maxlen-1] == 1:
-                            for key in dexpand:
-                                dres.setdefault(key,[])
-                                dres[key].append(",".join([str(k) for k in dexpand[key][j][0:maxlen]]))
-                            for key in ONE_KEYS:
-                                dres.setdefault(key,[])
-                                dres[key].append(dcur[key])
-
-                        for n in range(maxlen+1,curlen+1):
-                            if dexpand["selectmasks"][j][n-1] == 1:
-                                for key in dexpand:
-                                    dres.setdefault(key,[])
-                                    if key =="selectmasks":
-                                        dres[key].append(",".join([str(pad_val)] * (maxlen - 1) + ["1"]))
-                                    else:
-                                        dres[key].append(",".join([str(k) for k in dexpand[key][j][n-maxlen: n]]))
-
-                                for key in ONE_KEYS:
-                                    dres.setdefault(key,[])
-                                    dres[key].append(dcur[key])
-                    else:
-                        # no window
-                        k = 0
-                        rest = curlen
-                        while curlen >= k + maxlen:
-                            rest = rest -maxlen
-                            if dexpand["selectmasks"][j][k + maxlen - 1] == 1:
-                                for key in dexpand:
-                                    dres.setdefault(key,[])
-                                    dres[key].append(",".join([str(s) for s in dexpand[key][j][k: k + maxlen]]))
-                                for key in ONE_KEYS:
-                                    dres.setdefault(key, [])
-                                    dres[key].append(dcur[key])
-                            k += maxlen
-                        if rest < min_seq_len:  # 剩下长度<min_seq_len不预测
-                            continue
-                        pad_dim = maxlen -rest
+        dexpand,global_qidx = expand_question(dcur,global_qidx)
+        seq_num = len(dexpand["responses"])
+        for j in range(seq_num):
+            curlen = len(dexpand["responses"][j])
+            if curlen < 2: # 不预测第1个题
+                continue
+            if curlen < maxlen:
+                for key in dexpand:
+                    pad_dim = maxlen - curlen
+                    paded_info = np.concatenate([dexpand[key][j][0:],np.array([pad_val] * pad_dim)])
+                    dres.setdefault(key,[])
+                    dres[key].append(",".join([str(k) for k in paded_info]))
+                for key in ONE_KEYS:
+                    dres.setdefault(key,[])
+                    dres[key].append(dcur[key])
+            else:
+                # 超出范围设置window
+                if window:
+                    if dexpand["selectmasks"][j][maxlen-1] == 1:
                         for key in dexpand:
                             dres.setdefault(key,[])
-                            paded_info = np.concatenate([dexpand[key][j][k:], np.array([pad_val] * pad_dim)])
-                            dres[key].append(",".join([str(s) for s in paded_info]))
+                            dres[key].append(",".join([str(k) for k in dexpand[key][j][0:maxlen]]))
                         for key in ONE_KEYS:
                             dres.setdefault(key,[])
                             dres[key].append(dcur[key])
-        dfinal = dict()
-        for key in ALL_KEYS:
-            if key in save_keys:
-                dfinal[key] = dres[key]
-        finaldf = pd.DataFrame(dfinal)
-        return True,finaldf
+
+                    for n in range(maxlen+1,curlen+1):
+                        if dexpand["selectmasks"][j][n-1] == 1:
+                            for key in dexpand:
+                                dres.setdefault(key,[])
+                                if key =="selectmasks":
+                                    dres[key].append(",".join([str(pad_val)] * (maxlen - 1) + ["1"]))
+                                else:
+                                    dres[key].append(",".join([str(k) for k in dexpand[key][j][n-maxlen: n]]))
+
+                            for key in ONE_KEYS:
+                                dres.setdefault(key,[])
+                                dres[key].append(dcur[key])
+                else:
+                    # no window
+                    k = 0
+                    rest = curlen
+                    while curlen >= k + maxlen:
+                        rest = rest -maxlen
+                        if dexpand["selectmasks"][j][k + maxlen - 1] == 1:
+                            for key in dexpand:
+                                dres.setdefault(key,[])
+                                dres[key].append(",".join([str(s) for s in dexpand[key][j][k: k + maxlen]]))
+                            for key in ONE_KEYS:
+                                dres.setdefault(key, [])
+                                dres[key].append(dcur[key])
+                        k += maxlen
+                    if rest < min_seq_len:  # 剩下长度<min_seq_len不预测
+                        continue
+                    pad_dim = maxlen -rest
+                    for key in dexpand:
+                        dres.setdefault(key,[])
+                        paded_info = np.concatenate([dexpand[key][j][k:], np.array([pad_val] * pad_dim)])
+                        dres[key].append(",".join([str(s) for s in paded_info]))
+                    for key in ONE_KEYS:
+                        dres.setdefault(key,[])
+                        dres[key].append(dcur[key])
+    dfinal = dict()
+    for key in ALL_KEYS:
+        if key in save_keys:
+            dfinal[key] = dres[key]
+    finaldf = pd.DataFrame(dfinal)
+    return True,finaldf
 
 
-def write_config(dataset_name, dkeyid2idx, effective_keys, configf, dpath, k, min_seq_len, maxlen, flag, other_config={}):
+def write_config(dataset_name, dkeyid2idx, effective_keys, configf, dpath, k=5, min_seq_len=3, maxlen=200, flag=False, other_config={}):
     input_type, num_q, num_c = [], 0, 0
     if "questions" in effective_keys:
         input_type.append("questions")
@@ -584,7 +612,7 @@ def write_config(dataset_name, dkeyid2idx, effective_keys, configf, dpath, k, mi
         fout.write(data)
 
 
-def main(dname, fname, dataset_name, config_data, min_seq_len=3, maxlen=200, kfold=5):
+def main(dname, fname, dataset_name, configf, min_seq_len=3, maxlen=200, kfold=5):
         stares = []
         total_df, effective_keys = read_data(fname)
         # print(total_df)
@@ -672,8 +700,7 @@ def main(dname, fname, dataset_name, config_data, min_seq_len=3, maxlen=200, kfo
             print(f"test question window interactions num: {ins}, select num: {ss}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
 
 
-        write_config(dataset_name=dataset_name, dkeyid2idx = dkeyid2idx, effective_keys=effective_keys,
-                     config=config,dpath=dname,k=kfold,min_seq_len=min_seq_len,maxlen=maxlen,flag=flag)
+        write_config(dataset_name=dataset_name, dkeyid2idx=dkeyid2idx, effective_keys=effective_keys,configf=configf,dpath=dname,k=kfold,min_seq_len=min_seq_len,maxlen=maxlen,flag=flag)
 
         print("="*20)
         print("\n".join(stares))

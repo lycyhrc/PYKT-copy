@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from pykt.preprocess.split_datasets import read_data, get_max_concepts, calStatistics, save_id2idx, ALL_KEYS, \
-    train_test_split, KFold_split, save_dcur, ONE_KEYS, write_config
+    train_test_split, KFold_split, save_dcur, write_config, ONE_KEYS
 
 
 def id_mapping_que(df):
@@ -47,14 +47,16 @@ def id_mapping_que(df):
     return finaldf,dkeyid2idx
 
 
-def generate_sequences(df, effective_keys, min_seq_len=3, maxlen=200,pad_val = -1):
+def generate_sequences(df, effective_keys, min_seq_len=3, maxlen=200, pad_val=-1):
     save_keys = list(effective_keys) + ["selectmasks"]
-    dres = {"selectmasks":[]}
+    dres = {"selectmasks": []}
     dropnum = 0
-    for i,row in df.iterrows():
-        dcur = save_dcur(row,effective_keys)
+    print(df)
+    print(effective_keys)
+    for i, row in df.iterrows():
+        dcur = save_dcur(row, effective_keys)
 
-        rest, lenrs = len(dcur["response"]),len(dcur["responses"])
+        rest, lenrs = len(dcur["responses"]), len(dcur["responses"])
         j = 0
         while lenrs >= j + maxlen:
             rest = rest - (maxlen)
@@ -64,11 +66,10 @@ def generate_sequences(df, effective_keys, min_seq_len=3, maxlen=200,pad_val = -
                     dres[key].append(",".join(dcur[key][j: j + maxlen]))  # [str(k) for k in dcur[key][j: j + maxlen]]))
                 else:
                     dres[key].append(dcur[key])
-            dres["selectmasks"].append(",".join(["1"]*maxlen))
+            dres["selectmasks"].append(",".join(["1"] * maxlen))
 
-            j+=maxlen
-
-        if rest < min_seq_len: # delete sequence len less than min_seq_len
+            j += maxlen
+        if rest < min_seq_len:  # delete sequence len less than min_seq_len
             dropnum += rest
             continue
 
@@ -80,9 +81,9 @@ def generate_sequences(df, effective_keys, min_seq_len=3, maxlen=200,pad_val = -
                 dres[key].append(",".join([str(k) for k in paded_info]))
             else:
                 dres[key].append(dcur[key])
-        dres["selectmasks"].append(",".join(["1"]*rest + [str(pad_val)]* pad_dim))
+        dres["selectmasks"].append(",".join(["1"] * rest + [str(pad_val)] * pad_dim))
 
-    # after preprocess data,report
+    # after preprocess data, report
     dfinal = dict()
     for key in ALL_KEYS:
         if key in save_keys:
@@ -170,7 +171,7 @@ def main(dname, fname, dataset_name, configf, min_seq_len=3, maxlen = 200, kfold
     dkeyid2idx["max_concepts"] = max_concepts
 
     save_id2idx(dkeyid2idx, os.path.join(dname, "keyid2idx.json")) # 新的DataFrame和一个字典dkeyid2idx（用于保存每个标签对应的唯一数值ID
-    effective_keys.add("folds")
+    effective_keys.add("fold")
 
     # ALL_KEYS的列表中的每个键是否在effective_keys中
     df_save_keys = []
@@ -184,7 +185,7 @@ def main(dname, fname, dataset_name, configf, min_seq_len=3, maxlen = 200, kfold
     splitdf[df_save_keys].to_csv(os.path.join(dname, "train_valid_question.csv"),index=None)
     ins, ss, qs, cs, seqnum = calStatistics(splitdf, stares, "original train+valid question level")
     print(f"train+valid original interactions num: {ins}, select num: {ss}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
-
+    print(splitdf)
     # generate sequences
     split_seqs = generate_sequences(splitdf, effective_keys, min_seq_len, maxlen)
     ins,ss,qs,cs,seqnum = calStatistics(split_seqs, stares,"train+valid sequences question level")
@@ -220,7 +221,7 @@ def main(dname, fname, dataset_name, configf, min_seq_len=3, maxlen = 200, kfold
     }
 
     write_config(dataset_name=dataset_name, dkeyid2idx = dkeyid2idx,effective_keys=effective_keys,
-                 configf=configf,dpath=dname, k= kfold, min_seq_len=min_seq_len,maxlen=maxlen,
+                 configf=configf,dpath=dname, k= kfold, min_seq_len=min_seq_len,maxlen=maxlen,flag=True,
                  other_config=other_config)
 
     print("="*20)
