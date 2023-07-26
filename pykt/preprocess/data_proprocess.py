@@ -24,7 +24,10 @@ def process_raw_data(dataset_name, dname2paths):
     print(f" 开始处理数据：{dataset_name}")
     if dataset_name=="statics2011":
         from .statics2011_preprocess import read_data_from_csv
-
+    elif dataset_name=="poj":
+        from .poj_preprocess import read_data_from_csv
+    else:
+        pass
     #  数据集处理逻辑
     if dataset_name=="":
         pass
