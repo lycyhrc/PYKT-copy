@@ -36,7 +36,7 @@ def cal_loss(model, ys, r, rshft, sm, preloss=[]):
             loss = model.l1 * loss1 + model.l2 * ys[1]
         else:
             loss = loss1
-
+    # cal_loss(dkt)
     elif model_name in ["rkt", "dimkt", "dkt", "dkt_forget", "dkvmn", "deep_irt", "kqn", "sakt", "saint", "atkt",
                         "atktfix", "gkt", "skvmn", "hawkes"]:
         # 通过遮盖器选择模型输出和移位后的响应
@@ -44,6 +44,7 @@ def cal_loss(model, ys, r, rshft, sm, preloss=[]):
         t = torch.masked_select(rshft, sm)
         # 计算二元交叉熵损失
         loss = binary_cross_entropy(y.double(), t.double())
+
     elif model_name == "dkt+":
         y_curr = torch.masked_select(ys[1], sm)
         y_next = torch.masked_select(ys[0], sm)
@@ -144,23 +145,23 @@ def model_forward(model, data, rel=None):
         ys.append(y[:, 1:])
         preloss.append(reg_loss)
     elif model_name in ["atkt", "atktfix"]:
-        # y, features = model(c.long(), r.long())
-        # y = (y * one_hot(cshft.long(), model.num_c)).sum(-1)
-        # loss = cal_loss(model, [y], r, rshft, sm)
-        # # at
-        # features_grad = grad(loss, features, retain_graph=True)
-        # p_adv = torch.FloatTensor(model.epsilon * _l2_normalize_adv(features_grad[0].data))
-        # p_adv = Variable(p_adv).to(device)
-        # pred_res, _ = model(c.long(), r.long(), p_adv)
-        # # second loss
-        # pred_res = (pred_res * one_hot(cshft.long(), model.num_c)).sum(-1)
-        # adv_loss = cal_loss(model, [pred_res], r, rshft, sm)
-        # loss = loss + model.beta * adv_loss
-        pass
+        y, features = model(c.long(), r.long())
+        y = (y * one_hot(cshft.long(), model.num_c)).sum(-1)
+        loss = cal_loss(model, [y], r, rshft, sm)
+        # at
+        features_grad = grad(loss, features, retain_graph=True)
+        p_adv = torch.FloatTensor(model.epsilon * _l2_normalize_adv(features_grad[0].data))
+        p_adv = Variable(p_adv).to(device)
+        pred_res, _ = model(c.long(), r.long(), p_adv)
+        # second loss
+        pred_res = (pred_res * one_hot(cshft.long(), model.num_c)).sum(-1)
+        adv_loss = cal_loss(model, [pred_res], r, rshft, sm)
+        loss = loss + model.beta * adv_loss
+
     elif model_name == "gkt":
         y = model(cc.long(), cr.long())
         ys.append(y)
-        # cal loss
+    # cal loss
     elif model_name == "lpkt":
         # y = model(cq.long(), cr.long(), cat, cit.long())
         y = model(cq.long(), cr.long(), cit.long())
@@ -184,41 +185,73 @@ def model_forward(model, data, rel=None):
 def train_model(model, train_loader, valid_loader, num_epochs, opt, ckpt_path, test_loader=None, test_window_loader=None, save_model=False, data_config=None, fold=None):
     max_auc, best_epoch = 0, -1
     train_step = 0
-
+    # 根据模型的名字（model.model_name）做一些特定的准备工作
     rel = None
-
     if model.model_name =="rkt":
         pass
     if model.model_name =="lpkt":
         pass
 
-    for i in range(1, num_epochs + 1):
+    for epoch in range(1, num_epochs + 1): # 循环执行num_epochs个训练周期，每个周期内遍历数据
         loss_mean = []
         for data in train_loader:
-            train_step+=1
+            train_step += 1
             if model.model_name in que_type_models and model.model_name not in ["lpkt", "rkt"]:
                 model.model.train()
             else:
                 model.train()
+            #【模型的前向计算，输出通常是损失值】
             if model.model_name == 'rkt':
                 # loss =
                 pass
             else:
-                loss = model_forward(model,data)
-            opt.zero_grad()
-            loss.backward()
+                loss = model_forward(model,data)  # 每次拿出一批数据送入模型进行前向计算（model_forward()），得到当前批次的损失值
+            opt.zero_grad() # 将模型的梯度清零
+            loss.backward() # 【计算损失的梯度】
+            #【模型参数的更新】
             if model.model_name == "rkt":
-                clip_grad_norm_(model.parameters(), model.grad_clip)
+                clip_grad_norm_(model.parameters(), model.grad_clip) # 使用clip_grad_norm_()对梯度进行裁剪以防止梯度爆炸
             opt.step()
 
-            loss_mean.append(loss.detach().cpu().numpy())
+            loss_mean.append(loss.detach().cpu().numpy()) # 把每一步训练的损失值从张量转换为NumPy数组，添加到loss_mean
             # if model.model_name == "gkt" and train_step % 10 == 0:
             #     text = f"Total train step is {train_step}, the loss is {loss.item():.5}"
             #     debug_print(text=text, fuc_name="train_model")
         if model.model_name == 'lpkt':
             # scheduler.step()  # update each epoch
             pass
-        loss_mean = np.mean(loss_mean)
+        loss_mean = np.mean(loss_mean) # 一个训练周期中所有epoch的平均损失
+        #【模型在验证集上的评估】
+        if model.model_name == 'rkt':
+            pass
+        else:
+            auc,acc = evaluate(model, valid_loader, model.model_name) # 训练每个周期结束后，都会在验证数据集上评估模型的性能
+        # 并根据模型在验证集上的表现来决定是否要保存模型的参数
+        if auc > max_auc + 1e-3:
+            # 【模型参数的保存】
+            if save_model:
+                torch.save(model.state_dict(), os.path.join(ckpt_path, model.emb_type+"_model.ckpt"))
+            max_auc = auc
+            best_epoch = epoch
+
+            testauc, testacc = -1, -1
+            window_testauc, window_testacc = -1, -1
+            if not save_model:
+                if test_loader != None:
+                    save_test_path = os.path.join(ckpt_path, model.emb_type+"_test_predictions.txt")
+                    testauc, testacc = evaluate(model, test_loader, model.model_name, save_test_path)
+                if test_window_loader != None:
+                    save_test_path = os.path.join(ckpt_path, model.emb_type + "_test_window_predictions.txt")
+                    testauc, testacc = evaluate(model, test_window_loader, model.model_name, save_test_path)
+        validauc, validacc = auc, acc
+        print(f"Epoch: {epoch}, validauc:{validauc:.4}, validacc:{validacc:.4},"
+              f" best epoch: {best_epoch}, best auc:{max_auc:.4}, "
+              f"train loss:{loss_mean},emb_type:{model.emb_type}, model:{model.model_name}, save_dir:{ckpt_path}")
+        print(f"            testauc: {round(testauc,4)}, testacc: {round(testacc,4)}, "
+              f"window_testauc: {round(window_testauc,4)}, window_testacc: {round(window_testacc,4)}")
+
+        if epoch - best_epoch >= 10: # 如果当前的周期数与最佳周期的差值大于等于10，那么训练将提前终止，否则继续下一个周期的训练
+            break
 
 
 
