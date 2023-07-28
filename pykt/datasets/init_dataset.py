@@ -1,4 +1,4 @@
-import os.path
+import os,sys
 
 from torch.utils.data import DataLoader
 
@@ -76,30 +76,78 @@ def update_gap(max_rgap, max_sgap, max_pcount, cur):
     max_pcount = cur.max_pcount if cur.max_pcount > max_pcount else max_pcount
     return max_rgap, max_sgap, max_pcount
 
-
 def init_dataset4train(dataset_name, model_name, data_config, i, batch_size, diff_level=None):
-    print(f"dataset_name: {dataset_name}")
-    data_config = data_config[dataset_name]
-    all_folds = set(data_config["folds"]) # 5 folds
+    print(f"dataset_name:{dataset_name}")
+    data_config = data_config[dataset_name]  # 指定数据集的详细配置文件
+    all_folds = set(data_config["folds"])   # 所有 folds
     if model_name in ["dkt_forget", "bakt_time"]:
-        max_rgap, max_sgap, max_pcount = 0,0,0
-        curvalid = DktForgetDataset(os.path.join(data_config["dpath"], data_config["train_valid_file"]), data_config["input_type"], {i})
-        curtrain = DktForgetDataset(os.path.join(data_config["dpath"], data_config["train_valid_file"]), data_config["input_type"], all_folds-{i})
+        max_rgap, max_sgap, max_pcount = 0, 0, 0   # 初始化最大的回顾间隔，学习间隔和问题出现次数为0
+        curvalid = DktForgetDataset(
+            os.path.join(data_config["dpath"], data_config["train_valid_file"]),
+            data_config["input_type"], {i})
+        curtrain = DktForgetDataset(
+            os.path.join(data_config["dpath"], data_config["train_valid_file"]),
+            data_config["input_type"], all_folds - {i})
+        # 更新最大的回顾间隔，学习间隔和问题出现次数
         max_rgap, max_sgap, max_pcount = update_gap(max_rgap, max_sgap, max_pcount, curtrain)
         max_rgap, max_sgap, max_pcount = update_gap(max_rgap, max_sgap, max_pcount, curvalid)
-    elif model_name == "lpkt":
-        pass
+    # elif model_name == "lpkt":
+    #     at2idx, it2idx = generate_time2idx(data_config)
+    #     # json_str = json.dumps(at2idx)
+    #     # with open('at2idx.json', 'w') as json_file:
+    #     #     json_file.write(json_str)
+    #     # json_str_2 = json.dumps(it2idx)
+    #     # with open('it2idx.json', 'w') as json_file2:
+    #     #     json_file2.write(json_str_2)
+    #     curvalid = LPKTDataset(os.path.join(data_config["dpath"], data_config["train_valid_file_quelevel"]), at2idx,
+    #                            it2idx, data_config["input_type"], {i})
+    #     curtrain = LPKTDataset(os.path.join(data_config["dpath"], data_config["train_valid_file_quelevel"]), at2idx,
+    #                            it2idx, data_config["input_type"], all_folds - {i})
+    # elif model_name in ["rkt"] and dataset_name in ["statics2011", "assist2015", "poj"]:
+    #     curvalid = KTDataset(os.path.join(data_config["dpath"], data_config["train_valid_file"]),
+    #                          data_config["input_type"], {i})
+    #     curtrain = KTDataset(os.path.join(data_config["dpath"], data_config["train_valid_file"]),
+    #                          data_config["input_type"], all_folds - {i})
+    # elif model_name in que_type_models:
+    #     curvalid = KTQueDataset(os.path.join(data_config["dpath"], data_config["train_valid_file_quelevel"]),
+    #                             input_type=data_config["input_type"], folds={i},
+    #                             concept_num=data_config['num_c'], max_concepts=data_config['max_concepts'])
+    #     curtrain = KTQueDataset(os.path.join(data_config["dpath"], data_config["train_valid_file_quelevel"]),
+    #                             input_type=data_config["input_type"], folds=all_folds - {i},
+    #                             concept_num=data_config['num_c'], max_concepts=data_config['max_concepts'])
+    # elif model_name in ["atdkt"]:
+    #     curvalid = ATDKTDataset(os.path.join(data_config["dpath"], data_config["train_valid_file"]),
+    #                             data_config["input_type"], {i})
+    #     curtrain = ATDKTDataset(os.path.join(data_config["dpath"], data_config["train_valid_file"]),
+    #                             data_config["input_type"], all_folds - {i})
+    # elif model_name == "dimkt":
+    #     curvalid = DIMKTDataset(data_config["dpath"],
+    #                             os.path.join(data_config["dpath"], data_config["train_valid_file"]),
+    #                             data_config["input_type"], {i}, diff_level=diff_level)
+    #     curtrain = DIMKTDataset(data_config["dpath"],
+    #                             os.path.join(data_config["dpath"], data_config["train_valid_file"]),
+    #                             data_config["input_type"], all_folds - {i}, diff_level=diff_level)
     else:
-        print(KTDataset)
-        curvalid = KTDataset(os.path.join(data_config["dpath"],data_config["train_valid_file"]), data_config["input_type"], {i}) # i= 0
+        # 对于其他模型，创建基本的KTDataset训练集和验证集
+        curvalid = KTDataset(os.path.join(data_config["dpath"], data_config["train_valid_file"]),
+                             data_config["input_type"], {i})
         curtrain = KTDataset(os.path.join(data_config["dpath"], data_config["train_valid_file"]),
                              data_config["input_type"], all_folds - {i})
-    train_loader = DataLoader(curtrain,batch_size)
-    valid_loader = DataLoader(curvalid, batch_size)
+    # 创建训练和验证数据加载器
+    train_loader = DataLoader(curtrain, batch_size=batch_size)
+    valid_loader = DataLoader(curvalid, batch_size=batch_size)
 
+    # 对于特定模型（dkt_forget 和 bakt_time），更新数据集配置信息中的 num_rgap、num_sgap 和 num_pcount
     if model_name in ["dkt_forget", "bakt_time"]:
         data_config["num_rgap"] = max_rgap + 1
         data_config["num_sgap"] = max_sgap + 1
         data_config["num_pcount"] = max_pcount + 1
-
+    # if model_name == "lpkt":
+    #     print(f"num_at:{len(at2idx)}")
+    #     print(f"num_it:{len(it2idx)}")
+    #     data_config["num_at"] = len(at2idx) + 1
+    #     data_config["num_it"] = len(it2idx) + 1
+    # test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    # # test_window_loader = DataLoader(test_window_dataset, batch_size=batch_size, shuffle=False)
+    # test_window_loader = None
     return train_loader, valid_loader
