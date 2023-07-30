@@ -4,17 +4,18 @@ import os
 
 from .dkt import DKT
 from .dkt_forget import DKTForget
+from .sakt import SAKT
 
 device = "cpu" if not torch.cuda.is_available() else "cuda"
 
 def init_model(model_name, model_config, data_config, emb_type):
     if model_name == "dkt":
         print(data_config["num_c"])
-        model = DKT(data_config["num_c"], **model_config, emb_type=emb_type, emb_path=data_config["emb_path"]).to(
-            device)
+        model = DKT(data_config["num_c"], **model_config, emb_type=emb_type, emb_path=data_config["emb_path"]).to(device)
     elif model_name == "dkt_forget":
-        model = DKTForget(data_config["num_c"], data_config["num_rgap"], data_config["num_sgap"],
-                          data_config["num_pcount"], **model_config).to(device)
+        model = DKTForget(data_config["num_c"], data_config["num_rgap"], data_config["num_sgap"], data_config["num_pcount"], **model_config).to(device)
+    elif model_name == "sakt":
+        model = SAKT(data_config["num_c"], **model_config, emb_type=emb_type, emb_path=data_config["emb_path"]).to(device)
     else:
         print("The wrong model name was used...")
         return None
