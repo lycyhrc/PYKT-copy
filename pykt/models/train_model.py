@@ -15,7 +15,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 def cal_loss(model, ys, r, rshft, sm, preloss=[]):
     model_name = model.model_name
     # 根据不同的模型类型计算损失函数
-    if model_name in ["dkt", "dkt_forget", "dkvmn", "deep_irt", "kqn", "sakt", "saint", "atkt", "atktfix", "gkt",
+    if model_name in ["dkt", "sakt", "saint","dkt_forget", "dkvmn", "deep_irt", "kqn", "atkt", "atktfix", "gkt",
                       "skvmn", "hawkes"]:
         # 对于这些模型，使用二元交叉熵损失函数  mask_select保留sm中为true的元素
         y = torch.masked_select(ys[0], sm)
@@ -112,12 +112,12 @@ def model_forward(model, data):
     elif model_name in ["dkvmn", "deep_irt", "skvmn"]:
         y = model(cc.long(), cr.long())
         ys.append(y[:, 1:])
-    elif model_name in ["kqn", "sakt"]:
+    elif model_name in ["sakt", "kqn"]:
         y = model(c.long(), r.long(), cshft.long())
         ys.append(y)
     elif model_name in ["saint"]:
-        y = model(cq.long(), cc.long(), r.long())
-        ys.append(y[:, 1:])
+        y = model(cq.long(), cc.long(), r.long()) # 原始序列第一元素，以及移位序列的所有元素
+        ys.append(y[:, 1:]) # 除了第一个元素
     elif model_name in ["akt", "akt_vector", "akt_norasch", "akt_mono", "akt_attn", "aktattn_pos", "aktmono_pos",
                         "akt_raschx", "akt_raschy", "aktvec_raschx"]:
         y, reg_loss = model(cc.long(), cr.long(), cq.long())
