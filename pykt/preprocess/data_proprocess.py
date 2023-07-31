@@ -28,6 +28,8 @@ def process_raw_data(dataset_name, dname2paths):
         from .poj_preprocess import read_data_from_csv
     elif dataset_name == "assist2015":
         from .assist2015_preprocess import read_data_from_csv
+    elif dataset_name == "assist2009":
+        from .assist2009_preprocess import read_data_from_csv
     else:
         pass
     #  数据集处理逻辑

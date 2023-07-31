@@ -10,7 +10,8 @@ from pykt.preprocess.split_datasets_que import main as split_question
 dname2paths = {
     "statics2011": "../data/statics2011/AllData_student_step_2011F.csv",
     "poj": "../data/poj/poj_log.csv",
-    "assist2015": "../data/assist2015/2015_100_skill_builders_main_problems.csv"
+    "assist2015": "../data/assist2015/2015_100_skill_builders_main_problems.csv",
+    "assist2009": "../data/assist2009/skill_builder_data_corrected_collapsed.csv"
 }
 
 # 项目的数据配置json文件
