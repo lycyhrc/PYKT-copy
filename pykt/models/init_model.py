@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import os
 
+from .dimkt import DIMKT
 from .dkt import DKT
 from .dkt_forget import DKTForget
 from .sakt import SAKT
@@ -20,6 +21,8 @@ def init_model(model_name, model_config, data_config, emb_type):
     elif model_name == "saint":
         model = SAINT(data_config["num_q"], data_config["num_c"], **model_config, emb_type=emb_type, emb_path=data_config["emb_path"]).to(
             device)
+    elif model_name == "dimkt":
+        model = DIMKT(data_config["num_q"], data_config["num_c"], **model_config, emb_type=emb_type, emb_path=data_config["emb_path"]).to(device)
     else:
         print("The wrong model name was used...")
         return None
