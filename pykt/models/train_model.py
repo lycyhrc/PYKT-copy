@@ -15,7 +15,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 def cal_loss(model, ys, r, rshft, sm, preloss=[]):
     model_name = model.model_name
     # 根据不同的模型类型计算损失函数
-    if model_name in ["dkt", "sakt", "saint","dkt_forget", "dkvmn", "deep_irt", "kqn", "atkt", "atktfix", "gkt",
+    if model_name in ["dkt", "sakt", "saint","dimkt","kqn", "dkt_forget", "dkvmn", "deep_irt", "atkt", "atktfix", "gkt",
                       "skvmn", "hawkes"]:
         # 对于这些模型，使用二元交叉熵损失函数  mask_select保留sm中为true的元素
         y = torch.masked_select(ys[0], sm)
@@ -41,13 +41,13 @@ def cal_loss(model, ys, r, rshft, sm, preloss=[]):
     elif model_name == "dkt+":
         # 对于dkt+模型，使用二元交叉熵损失函数，并添加一些附加的损失项
         y_curr = torch.masked_select(ys[1], sm)
-        y_next = torch.masked_select(ys[0], sm)
+        y_next = torch.masked_select(ys[0], sm)  # next-i
         r_curr = torch.masked_select(r, sm)
-        r_next = torch.masked_select(rshft, sm)
-        loss = binary_cross_entropy(y_next.double(), r_next.double())
+        r_next = torch.masked_select(rshft, sm)  # next-r
+        loss = binary_cross_entropy(y_next.double(), r_next.double())  # loss-next
 
-        loss_r = binary_cross_entropy(y_curr.double(),
-                                      r_curr.double())  # if answered wrong for C in t-1, cur answer for C should be wrong too
+        loss_r = binary_cross_entropy(y_curr.double(),r_curr.double())  # loss-curr
+
         loss_w1 = torch.masked_select(torch.norm(ys[2][:, 1:] - ys[2][:, :-1], p=1, dim=-1), sm[:, 1:])
         loss_w1 = loss_w1.mean() / model.num_c
         loss_w2 = torch.masked_select(torch.norm(ys[2][:, 1:] - ys[2][:, :-1], p=2, dim=-1) ** 2, sm[:, 1:])
@@ -78,9 +78,16 @@ def model_forward(model, data):
         dcur, dgaps = data
     else:
         dcur = data
-    # 来自于 KTDataset中__getitem__方法返回的dcur数据
-    q, c, r, t = dcur["qseqs"], dcur["cseqs"], dcur["rseqs"], dcur["tseqs"]
-    qshft, cshft, rshft, tshft = dcur["shft_qseqs"], dcur["shft_cseqs"], dcur["shft_rseqs"], dcur["shft_tseqs"]
+    # dimkt:包含sd，qd的输入
+    if model_name in ["dimkt"]:
+        q, c, r, t = dcur["qseqs"], dcur["cseqs"], dcur["rseqs"], dcur["tseqs"]
+        sd, qd = dcur["sdseqs"], dcur["qdseqs"]
+        qshft, cshft, rshft, tshft = dcur["shft_qseqs"], dcur["shft_cseqs"], dcur["shft_rseqs"], dcur["shft_tseqs"]
+        sdshft, qdshft = dcur["shft_sdseqs"], dcur["shft_qdseqs"]
+    else:
+        # 来自于 KTDataset中__getitem__方法返回的dcur数据
+        q, c, r, t = dcur["qseqs"], dcur["cseqs"], dcur["rseqs"], dcur["tseqs"]
+        qshft, cshft, rshft, tshft = dcur["shft_qseqs"], dcur["shft_cseqs"], dcur["shft_rseqs"], dcur["shft_tseqs"]
     m, sm = dcur["masks"], dcur["smasks"]
 
     ys, preloss = [], []
@@ -113,7 +120,7 @@ def model_forward(model, data):
         y = model(cc.long(), cr.long())
         ys.append(y[:, 1:])
     elif model_name in ["sakt", "kqn"]:
-        y = model(c.long(), r.long(), cshft.long())
+        y = model(c.long(), r.long(), cshft.long())   # cshft: next skill
         ys.append(y)
     elif model_name in ["saint"]:
         y = model(cq.long(), cc.long(), r.long()) # 原始序列第一元素，以及移位序列的所有元素
@@ -153,6 +160,10 @@ def model_forward(model, data):
         ys.append(y[:, 1:])
     elif model_name in que_type_models:
         y, loss = model.train_one_step(data)
+    elif model_name == "dimkt":
+        y = model(q.long(),c.long(),sd.long(),qd.long(),r.long(),
+                  qdshft.long(),cshft.long(),sdshft.long(),qdshft.long())
+        ys.append(y)
 
     # 对于大多数模型，计算损失值并返回
     if model_name not in ["atkt", "atktfix"]+que_type_models or model_name in ["lpkt", "rkt"]:
