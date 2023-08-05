@@ -6,6 +6,7 @@ from .dimkt import DIMKT
 from .dkt import DKT
 from .dkt_forget import DKTForget
 from .kqn import KQN
+from .qdkt import QDKT
 from .sakt import SAKT
 from .saint import SAINT
 
@@ -25,6 +26,9 @@ def init_model(model_name, model_config, data_config, emb_type):
         model = DIMKT(data_config["num_q"], data_config["num_c"], **model_config, emb_type=emb_type, emb_path=data_config["emb_path"]).to(device)
     elif model_name == "kqn":
         model = KQN(data_config["num_c"], **model_config, emb_type=emb_type, emb_path=data_config["emb_path"]).to(device)
+    elif model_name == "qdkt":
+        model = QDKT(num_q=data_config['num_q'], num_c=data_config['num_c'],**model_config, emb_type=emb_type,
+                     emb_path=data_config["emb_path"]).to(device)
     else:
         print("The wrong model name was used...")
         return None

@@ -1,189 +1,118 @@
-import copy
-import json
 import os
-
-import numpy as np
+import sys
 import pandas as pd
+import numpy as np
+import json
+import copy
 
 ALL_KEYS = ["fold", "uid", "questions", "concepts", "responses", "timestamps",
-                "usetimes", "selectmasks", "is_repeat", "qidxs", "rest", "orirow", "cidxs"]
+            "usetimes", "selectmasks", "is_repeat", "qidxs", "rest", "orirow", "cidxs"]
 ONE_KEYS = ["fold", "uid"]
 
+
 def read_data(fname, min_seq_len=3, response_set=[0, 1]):
-        """
-            从指定的文本文件中读取和处理学生交互数据，返回一个pandas DataFrame和有效的键。
-            这个函数处理的数据包含六个部分：学生ID、问题ID、概念、回答、时间步长和使用时间。数据以6行为一个单位进行处理。
-            针对学生交互数量不足或者回答不在指定响应集的数据，该函数会进行清洗，清洗完的数据以字典形式存储，并转化为pandas DataFrame。
-
-            参数:
-            fname: 文件名称字符串。
-            min_seq_len: 最小的学生交互数量。默认为3，如果学生的交互数量少于这个数，该学生的数据将被删除。
-            response_set: 指定的有效响应集。默认为[0, 1]，如果学生的响应不在这个集合内，该学生的数据将被删除。
-
-            返回值:
-            df: 一个pandas DataFrame，包含清洗完毕的学生数据。
-            effective_keys: 一个集合，包含所有有效的键，这些键是在处理过程中实际存在的数据列名。
-
-            该函数在处理过程中会打印删除的学生数量、删除的交互数量、错误的响应数量以及有效的交互数量。
-        """
-        # 初始化一些变量
-        effective_keys = set() # 有效键的集合
-        dres = dict() # 存储处理后对数据，形式{"key" : [v1,v2,...vn]}
-        delstu, delnum, badr = 0, 0, 0 # 删除对 学生、交互、错误响应数量
-        goodnum = 0 # 记录有效的交互数量
-        # 打开txt文件，读取所有行
-        with open(fname, "r", encoding='utf8') as fin:
-            i = 0
-            lines = fin.readlines()
-            dcur = dict()  # 存储当前处理的数据
-            while i < len(lines):
-                line = lines[i].strip()
-                if i % 6 == 0:  # stuid：处理学生ID
-                    effective_keys.add("uid")
-                    tmps = line.split(",")
-                    stuid, seq_len = tmps[0], int(tmps[1])
-                    if seq_len < min_seq_len: # 如果学生的交互数量少于最小数量，删除这个学生的数据
-                        i += 6
-                        dcur = dict()
-                        delstu += 1
-                        delnum += seq_len
-                        continue
-                    dcur["uid"] = stuid
-                    goodnum += seq_len
-                elif i % 6 == 1:  # question ids：处理问题ID
-                    qs = []
-                    if line.find("NA") == -1:  # 如果存在问题ID
-                        effective_keys.add("questions")
-                        qs = line.split(",")
-                    dcur["questions"] = qs
-                elif i % 6 == 2: # concept：处理概念
-                    cs = []
-                    if line.find("NA") == -1:  # 如果存在概念
-                        effective_keys.add("concepts")
-                        cs = line.split(",")
-                    dcur["concepts"] = cs
-                elif i % 6 == 3:  # response：处理回答
-                    effective_keys.add("responses")
-                    rs = []
-                    if line.find("NA") == -1:
-                        flag = True
-                        for r in line.split(","):
-                            try:
-                                r = int(r)
-                                if r not in response_set: # 如果回答不在设定的响应集内，删除这个学生的数据
-                                    print(f"error response in line: {i}")
-                                    flag = False
-                                    break
-                                rs.append(r)
-                            except:
+    effective_keys = set()
+    dres = dict()
+    delstu, delnum, badr = 0, 0, 0
+    goodnum = 0
+    with open(fname, "r", encoding="utf8") as fin:
+        i = 0
+        lines = fin.readlines()
+        dcur = dict()
+        while i < len(lines):
+            line = lines[i].strip()
+            if i % 6 == 0:  # stuid
+                effective_keys.add("uid")
+                tmps = line.split(",")
+                stuid, seq_len = tmps[0], int(tmps[1])
+                if seq_len < min_seq_len:  # delete use seq len less than min_seq_len
+                    i += 6
+                    dcur = dict()
+                    delstu += 1
+                    delnum += seq_len
+                    continue
+                dcur["uid"] = stuid
+                goodnum += seq_len
+            elif i % 6 == 1:  # question ids / names
+                qs = []
+                if line.find("NA") == -1:
+                    effective_keys.add("questions")
+                    qs = line.split(",")
+                dcur["questions"] = qs
+            elif i % 6 == 2:  # concept ids / names
+                cs = []
+                if line.find("NA") == -1:
+                    effective_keys.add("concepts")
+                    cs = line.split(",")
+                dcur["concepts"] = cs
+            elif i % 6 == 3:  # responses
+                effective_keys.add("responses")
+                rs = []
+                if line.find("NA") == -1:
+                    flag = True
+                    for r in line.split(","):
+                        try:
+                            r = int(r)
+                            if r not in response_set:  # check if r in response set.
                                 print(f"error response in line: {i}")
                                 flag = False
                                 break
-                        if not flag:
-                            i += 3
-                            dcur = dict()
-                            badr += 1
-                            continue
-                    dcur["responses"] = rs
-                elif i % 6 == 4:  # timesteps：处理时间步长
-                    ts = []
-                    if line.find("NA") == -1:
-                        effective_keys.add("timesteps")
-                        timesets = line.split(",")
-                    dcur["timesteps"] = timesets
-                elif i % 6 == 5:  # usets：处理使用时间
-                    utsets = []
-                    if line.find("NA") == -1:
-                        effective_keys.add("usetimes")
-                        utsets = line.split(",")
-                    dcur["usetimes"] = utsets
+                            rs.append(r)
+                        except:
+                            print(f"error response in line: {i}")
+                            flag = False
+                            break
+                    if not flag:
+                        i += 3
+                        dcur = dict()
+                        badr += 1
+                        continue
+                dcur["responses"] = rs
+            elif i % 6 == 4:  # timestamps
+                ts = []
+                if line.find("NA") == -1:
+                    effective_keys.add("timestamps")
+                    ts = line.split(",")
+                dcur["timestamps"] = ts
+            elif i % 6 == 5:  # usets
+                usets = []
+                if line.find("NA") == -1:
+                    effective_keys.add("usetimes")
+                    usets = line.split(",")
+                dcur["usetimes"] = usets
 
-                    # 处理完每一位学生的所有数据后，将这些数据添加到最终的数据字典（dres）中
-                    for key in effective_keys:
-                        dres.setdefault(key, [])
-                        if key != "uid":
-                            dres[key].append(",".join([str(k) for k in dcur[key]]))
-                        else:
-                            dres[key].append(dcur[key]) # is uid
-                    dcur = dict()
-                i += 1
-        # 将数据字典转换为pandas DataFrame
-        df = pd.DataFrame(dres)
-        print(f"delete bad stu num of len: {delstu},delete interactions: {delnum}, of r: {badr}, good num: {goodnum}")
-        # 返回数据和有效的键
-        return df, effective_keys
-
-
-def get_max_concepts(total_df):
-        """
-        找出 DataFrame 中 "concepts" 列的值被逗号和下划线分割后得到的最大子字符串数量。(statics2011=1)
-        :param total_df: 输入的 DataFrame
-        :return:max_concepts： 最大的子字符串数量
-        """
-        max_concepts = 1
-        for concepts in total_df["concepts"]:  # 从DataFrame提取出"concepts"列的每个元素
-            for c in concepts.split(","):  # 将每个元素按逗号分割
-                max_concepts = max(max_concepts, len(c.split("_")))  # 计算每个概念被下划线分割后得到的子字符串数量，并更新最大值
-        return max_concepts
-
-
-def calStatistics(df, stares, key):
-        """
-       从输入的 DataFrame (df) 中，统计并返回以下信息：
-
-       - 有效响应的数量 (allin)：计算 'responses' 列中不为 '-1' 的响应总数。
-       - 有效选择的数量 (allselect)：计算 'selectmasks' 列中为 '1' 的选择总数。
-       - 唯一问题的数量：计算 'questions' 列中不重复（唯一）且不为 '-1' 的问题总数。
-       - 唯一概念的数量：计算 'concepts' 列中不重复（唯一）且不为 '-1' 的概念总数。
-       - DataFrame 的行数：即数据集中的总记录数量。
-
-       上述所有统计信息都以逗号分隔的字符串形式，添加到输入的 stares 列表中。
-
-       函数返回这些统计信息的数值形式，按顺序为：有效响应的数量，有效选择的数量，唯一问题的数量，唯一概念的数量，以及 DataFrame 的行数。
-
-       :param df: 输入的 DataFrame，要从中进行统计的数据集。
-       :param stares: 输入的列表，用于保存统计信息的字符串形式。
-       :param key: 用于标识当前处理的数据集的关键字。
-       :return: 返回一个包含五个元素的元组，分别为有效响应的数量，有效选择的数量，唯一问题的数量，唯一概念的数量，以及 DataFrame 的行数。
-       """
-        # 初始化所有统计量
-        allin, allselect = 0, 0  # 有效响应次数，有效选择次数
-        allqs, allcs = set(), set() # 不同问题数量，不同概念数量
-        # 遍历 DataFrame的每一行
-        for i, row in df.iterrows():
-            # 如果存在'responses'列，统计有效的响应次数（即不为'-1'的响应）
-            rs = row["responses"].split(",")
-            curlen = len(rs) - rs.count("-1")
-            allin += curlen
-
-            # 如果存在'selectmasks'列，统计有效的选择次数（即为'1'的选择）
-            if "selectmasks" in row:
-                ss = row["selectmasks"].split(",")
-                slen = ss.count("1")
-                allselect += slen
-
-            # 如果存在'concepts'列，统计唯一的概念数（即不为'-1'的概念）
-            if "concepts" in row:
-                cs = row["concepts"].split(",")
-                fc = list()
-                for c in cs:
-                    cc = c.split("_")
-                    fc.extend(cc)
-                curcs = set(fc) - {"-1"}
-                allcs |= curcs  # 将 curcs 中的所有元素添加到 allcs 中，这就完成了两个集合的并集操作
-
-            # 如果存在'questions'列，统计唯一的问题数（即不为'-1'的问题）
-            if "questions" in row:
-                qs = row["questions"].split(",")
-                curqs = set(qs) - {"-1"}
-                allqs |= curqs
-
-        # 将统计结果添加到 stares 列表中
-        stares.append(",".join([str(s) for s in [key, allin, df.shape[0], allselect]])) # 四个值转换为字符串并用 , 连接，然后添加到stares列表的末尾
-        return allin, allselect, len(allqs), len(allcs), df.shape[0]
+                for key in effective_keys:
+                    dres.setdefault(key, [])
+                    if key != "uid":
+                        dres[key].append(",".join([str(k) for k in dcur[key]]))
+                    else:
+                        dres[key].append(dcur[key])
+                dcur = dict()
+            i += 1
+    df = pd.DataFrame(dres)
+    print(
+        f"delete bad stu num of len: {delstu}, delete interactions: {delnum}, of r: {badr}, good num: {goodnum}")
+    return df, effective_keys
 
 
 def extend_multi_concepts(df, effective_keys):
+    """
+       该函数处理包含 "questions" 和 "concepts" 列的 DataFrame。对于 "concepts" 列中使用 "_" 连接的复合概念，
+       该函数将它们拆分为独立的单一概念，并创建新的 DataFrame 行，使每一行的 "concepts" 列只包含一个单一的概念。
+
+       同时，函数会添加新的 "is_repeat" 列，用于标记由于分割复合概念而新增的行，其中 "0" 表示原始数据行，"1" 表示新增的行。
+
+       如果 DataFrame 中不存在 "questions" 或 "concepts"，则函数将返回原始 DataFrame。
+
+       参数:
+       df (pandas.DataFrame): 原始 DataFrame，包含 "questions" 和 "concepts" 列
+       effective_keys (set): 有效的列名集合
+
+       返回:
+       finaldf (pandas.DataFrame): 处理后的 DataFrame
+       effective_keys (set): 更新后的有效列名集合，包含新增的 "is_repeat" 列
+       """
+
     if "questions" not in effective_keys or "concepts" not in effective_keys:
         print("has no questions or concepts! return original.")
         return df, effective_keys
@@ -217,56 +146,56 @@ def extend_multi_concepts(df, effective_keys):
             dres.setdefault(key, [])
             dres[key].append(",".join(dextend_res[key]))
 
+    finaldf = pd.DataFrame(dres)
+    effective_keys.add("is_repeat")
+    return finaldf, effective_keys
+
 
 def id_mapping(df):
-        """
-        为 DataFrame 中的 "questions"、"concepts" 和 "uid" 列中的每个唯一值分配一个新的唯一标识符，并创建一个新的 DataFrame，其中这些列的值被替换为新的标识符。    :param df:
-        :return:
-        """
-        id_keys = ["qusetions", "concepts", "uid"]
-        dres = dict()  # 存储新的df数据
-        dkeyid2idx = dict()  # 存储每个列的唯一值到新标识符的映射
-        print(f"df.columns: {df.columns}")
-        for key in df.columns:
-            if key not in id_keys:  # 当前列不在id_keys
-                dres[key] = df[key]  # 数据复制到 dres 中
-        for i, row in df.iterrows():
-            for key in id_keys:
-                if key not in df.columns:
-                    continue
-                dkeyid2idx.setdefault(key, dict())  # 如果这个键已经存在，则不改变它的值
-                dres.setdefault(key, [])
-                curids = []  # 用于存储当前行的新标识符
-                for id in row[key].split(","):  # 遍历当前行的当前键的值
-                    if id not in dkeyid2idx[key]:  # 遍历当前行的当前键的值
-                        dkeyid2idx[key][id] = len(dkeyid2idx[key])
-                    curids.append(str(dkeyid2idx[key][id]))
-                dres[key].append(",".join(curids))  # ：将 curids 中的所有元素连接成一个由逗号分隔的字符串，然后添加到 dres[key] 中
-        finaldf = pd.DataFrame(dres)  # 将 dres 转换为一个新的 DataFrame finaldf
-        return finaldf, dkeyid2idx
+    """
+        该函数对 "questions", "concepts", "uid" 等列进行处理，将其原有的 id 映射为从 0 开始的整数索引。对于每种 id，它们在新的 DataFrame 中的值就是它们在原 DataFrame 中出现的顺序。
 
+        参数:
+        df (pandas.DataFrame): 原始 DataFrame，可能包含 "questions", "concepts", "uid" 等列。
 
-def save_id2idx(dkeyid2idx, save_path):
-    with open(save_path, "w+") as fout:
-        fout.write(json.dumps(dkeyid2idx))
+        返回:
+        finaldf (pandas.DataFrame): id 被映射为整数索引后的 DataFrame。
+        dkeyid2idx (dict): 一个字典，其键为列名，值为另一个字典，该字典将原始 id 映射为新的整数索引。
+    """
+    id_keys = ["questions", "concepts", "uid"]
+    dres = dict()
+    dkeyid2idx = dict()
+    print(f"df.columns: {df.columns}")
+    for key in df.columns:
+        if key not in id_keys:
+            dres[key] = df[key]
+    for i, row in df.iterrows():
+        for key in id_keys:
+            if key not in df.columns:
+                continue
+            dkeyid2idx.setdefault(key, dict())
+            dres.setdefault(key, [])
+            curids = []
+            for id in row[key].split(","):
+                if id not in dkeyid2idx[key]:
+                    dkeyid2idx[key][id] = len(dkeyid2idx[key])
+                curids.append(str(dkeyid2idx[key][id]))
+            dres[key].append(",".join(curids))
+    finaldf = pd.DataFrame(dres)
+    return finaldf, dkeyid2idx
 
 
 def train_test_split(df, test_ratio=0.2):
-        """
-        在给定的 DataFrame df 上进行操作，将其随机分割为训练集和测试集。
-        :param df:
-        :param test_ratio: 测试集的比例（默认为 0.2）
-        :return: 训练集和测试集
-        """
-        df = df.sample(frac=1.0, random_state=42)
-        datanum = df.shape[0]
-        test_num = int(datanum * test_ratio)
-        train_num = datanum - test_num
-        train_df = df[0:train_num]
-        test_df = df[train_num:]
-
-        print(f"total num: {datanum},train+valid num: {train_num},test num: {test_num}")
-        return train_df, test_df
+    df = df.sample(frac=1.0, random_state=1024)
+    datanum = df.shape[0]
+    test_num = int(datanum * test_ratio)
+    train_num = datanum - test_num
+    train_df = df[0:train_num]
+    test_df = df[train_num:]
+    # report
+    print(
+        f"total num: {datanum}, train+valid num: {train_num}, test num: {test_num}")
+    return train_df, test_df
 
 
 def KFold_split(df, k=5):
@@ -292,98 +221,98 @@ def KFold_split(df, k=5):
     finaldf["fold"] = folds
     return finaldf
 
+
 def save_dcur(row, effective_keys):
-        """
-        从行中提取出有效键对应的值，并根据键是否在 ONE_KEYS 中以不同的方式处理这些值。
-        如果键在 ONE_KEYS 中，那么对应的值将直接被存储；否则，对应的值将被分割为一个列表。
-        :param row:
-        :param effective_keys:
-        :return:
-        """
-        dcur = dict()
-        for key in effective_keys:
-            if key not in ONE_KEYS:
-                # [int(i) for i in row[key].split(",")]
-                dcur[key] = row[key].split(",")
-            else:
-                dcur[key] = row[key]
-        return dcur
+    dcur = dict()
+    for key in effective_keys:
+        if key not in ONE_KEYS:
+            # [int(i) for i in row[key].split(",")]
+            dcur[key] = row[key].split(",")
+        else:
+            dcur[key] = row[key]
+    return dcur
 
 
-def generate_sequences(df, effective_keys, min_seq_len, maxlen, pad_val=-1):
-        """
-        函数在给定的 DataFrame df 上进行操作，将每一行的数据转换为一系列的序列。这个函数的主要目的是为序列模型（如循环神经网络）提供数据。
-        :param df:  train+valid df
-        :param effective_keys:
-        :param min_seq_len:
-        :param maxlen:
-        :return:
-        """
-        save_keys = list(effective_keys) + ['selectmasks']
-        dres = {"selectmasks": []}
-        dropnum = 0
-        for i, row in df.iterrows():
-            dcur = save_dcur(row, effective_keys)
+def generate_sequences(df, effective_keys, min_seq_len=3, maxlen=200, pad_val=-1):
+    """
+   将数据集中的每个用户的序列处理成一组固定长度（maxlen）的序列。
 
-            rest, lenrs = len(dcur["responses"]), len(dcur["responses"])
-            j = 0
-            while lenrs > j + maxlen:
-                rest = rest - maxlen
-                for key in effective_keys:
-                    dres.setdefault(key, [])
-                    if key not in ONE_KEYS:
-                        dres[key].append(",".join(dcur[key][j:j + maxlen]))
-                    else:
-                        dres[key].append(dcur[key])
-                dres["selectmasks"].append(",".join(["1"] * maxlen))
-                j += maxlen
-            if rest < min_seq_len:  # delete sequence len less than min_seq_len
-                dropnum = dropnum + rest
-                continue
+   如果一个序列的长度小于指定的最小长度，那么这个序列将被丢弃。如果一个序列的长度大于指定的最大长度，那么这个序列将被切割成多个长度为最大长度的子序列。
 
-            pad_dim = maxlen - rest
+   对于长度在最小长度和最大长度之间的序列，将其尾部用指定的值(selectmasks=-1)填充到最大长度,最终所有序列等长
+   参数:
+       df (pandas.DataFrame): 数据集，其中每行对应于一个用户的一个序列。
+       effective_keys (list): 包含有效列名的列表。
+       min_seq_len (int, optional): 序列的最小长度，小于此长度的序列将被丢弃。默认为3。
+       maxlen (int, optional): 序列的最大长度，大于此长度的序列将被切割。默认为200。
+       pad_val (int, optional): 用于填充的值，当序列长度小于最大长度时会用此值进行填充。默认为-1。
+
+   返回:
+       pandas.DataFrame: 处理后的数据集，其中每行对应于一个用户的一个固定长度的序列。数据集包含一个额外的 "selectmasks" 列，该列标记了每个序列中有效的位置。
+   """
+    save_keys = list(effective_keys) + ["selectmasks"]
+    dres = {"selectmasks": []}
+    dropnum = 0
+    for i, row in df.iterrows():  # 处理每个user的序列
+        dcur = save_dcur(row, effective_keys)
+
+        rest, lenrs = len(dcur["responses"]), len(dcur["responses"])
+        j = 0
+        while lenrs >= j + maxlen:  # 序列长度> max，划分为200的多行数据
+            rest = rest - (maxlen)
             for key in effective_keys:
                 dres.setdefault(key, [])
                 if key not in ONE_KEYS:
-                    paded_info = np.concatenate([dcur[key][j:], np.array([pad_val] * pad_dim)])
-                    dres[key].append(",".join([str(k) for k in paded_info]))
+                    # [str(k) for k in dcur[key][j: j + maxlen]]))
+                    dres[key].append(",".join(dcur[key][j: j + maxlen]))
                 else:
                     dres[key].append(dcur[key])
-            dres["selectmasks"].append(",".join(["1"] * rest + [str(pad_val)] * pad_dim))
+            dres["selectmasks"].append(",".join(["1"] * maxlen))
 
-        # after preprocess data,report
-        dfinal = dict()
-        for key in ALL_KEYS:
-            if key in save_keys:
-                dfinal[key] = dres[key]
-        finaldf = pd.DataFrame(dfinal)
-        print(f"dropnum: {dropnum}")
-        return finaldf
+            j += maxlen
+        if rest < min_seq_len:  # 序列长度 < min 删除
+            dropnum += rest
+            continue
 
+        pad_dim = maxlen - rest  # 要 padding的长度
+        for key in effective_keys:
+            dres.setdefault(key, [])
+            if key not in ONE_KEYS: # 不需要 padding的列
+                paded_info = np.concatenate(
+                    [dcur[key][j:], np.array([pad_val] * pad_dim)])
+                dres[key].append(",".join([str(k) for k in paded_info]))   # numpy -> list
+            else:
+                dres[key].append(dcur[key])
+        dres["selectmasks"].append(
+            ",".join(["1"] * rest + [str(pad_val)] * pad_dim))  # selectmasks: 有效位置1，无效位置-1
 
-def get_inter_qidx(df):
-        """
-        在给定的 DataFrame df 上进行操作，为每个交互（interaction）生成一个全局ID。
-        这个函数的主要目的是为每个交互生成一个唯一的标识符，以便在后续的处理中跟踪和引用这些交互。
-        :param test_df:
-        :return:
-        """
-        qidx_ids = [] # 存储每个interaction ID
-        bias = 0 # 用于计算全局ID
-        inter_num = 0 #用于计算交互对总数量
-        for _, row in df.iterrows():
-            ids_list = [str(x + bias)
-                        for x in range(len(row['responses'].split(',')))] #当前行的交互数量，然后生成全局ID，全局ID等于交互的索引加上偏移量bias
-            inter_num += len(ids_list)
-            ids = ",".join(ids_list)
-            qidx_ids.append(ids)
-            bias += len(ids_list)
-        assert inter_num - 1 == int(ids_list[-1])
-
-        return qidx_ids
+    # after preprocess data, report
+    dfinal = dict()
+    for key in ALL_KEYS:
+        if key in save_keys:
+            dfinal[key] = dres[key]
+    finaldf = pd.DataFrame(dfinal)
+    print(f"dropnum: {dropnum}")
+    return finaldf
 
 
 def generate_window_sequences(df, effective_keys, maxlen=200, pad_val=-1):
+    """
+    生成滑动窗口的序列。
+
+    对于每一个用户，遍历他们的序列，对于长度超过设定窗口大小（maxlen）的序列，将其滑动窗口切割为多个固定长度的子序列；对于长度不足窗口大小的序列，则在其尾部用指定的值进行填充到窗口大小。
+
+    对于每个子序列，只有最后一个位置是新的，前面的数据都是从前一个子序列中滑动过来的。所以在 selectmasks 中，这些滑动过来的位置被标记为无效（-1），只有最后一个位置被标记为有效（1），例如window为3的序列第2个selectmasks为[-1, -1, 1]
+
+    参数:
+        df (pandas.DataFrame): 数据集，其中每行对应于一个用户的一个序列。
+        effective_keys (list): 包含有效列名的列表。
+        maxlen (int, optional): 滑动窗口的大小。默认为200。
+        pad_val (int, optional): 用于填充的值，当序列长度小于窗口大小时会用此值进行填充。默认为-1。
+
+    返回:
+        pandas.DataFrame: 处理后的数据集，其中每行对应于一个用户的一个滑动窗口序列。数据集包含一个额外的 "selectmasks" 列，该列标记了每个序列中有效的位置。
+        """
     save_keys = list(effective_keys) + ["selectmasks"]
     dres = {"selectmasks": []}
     for i, row in df.iterrows():
@@ -403,7 +332,7 @@ def generate_window_sequences(df, effective_keys, maxlen=200, pad_val=-1):
                     dres.setdefault(key, [])
                     if key not in ONE_KEYS:
                         dres[key].append(",".join([str(k)
-                                         for k in dcur[key][j-maxlen: j]]))
+                                         for k in dcur[key][j-maxlen: j]]))  # 窗口滑动(N-max_len+1)个序列
                     else:
                         dres[key].append(dcur[key])
                 dres["selectmasks"].append(
@@ -430,139 +359,206 @@ def generate_window_sequences(df, effective_keys, maxlen=200, pad_val=-1):
     return finaldf
 
 
+def get_inter_qidx(df):
+    """
+    为每个交互（interaction）在输入的DataFrame中添加全局ID。
+
+    这个函数遍历输入的DataFrame，读取每行中的'responses'列（被视为以逗号分隔的字符串）。
+    然后，为每个'response'生成一个全局ID，这些ID存储为以逗号分隔的字符串，并添加到一个列表中。
+    这个函数确保每个交互都有一个唯一的全局ID，并且全局ID的总数与交互数匹配。
+
+    Args:
+        df (pd.DataFrame): 输入的DataFrame，期望有一列名为'responses'，包含以逗号分隔的字符串。
+
+    Returns:
+        qidx_ids (list of str): 包含全局ID的列表，列表的每个元素是以逗号分隔的字符串，
+                                字符串中的每个元素代表一个交互的全局ID。
+                                列表的长度与输入的DataFrame的行数相同，即每行数据都对应一个全局ID字符串。
+    """
+    qidx_ids = []
+    bias = 0
+    inter_num = 0
+    for _, row in df.iterrows():
+        ids_list = [str(x+bias)
+                    for x in range(len(row['responses'].split(',')))]
+        inter_num += len(ids_list)
+        ids = ",".join(ids_list)
+        qidx_ids.append(ids)
+        bias += len(ids_list)
+    assert inter_num-1 == int(ids_list[-1])
+
+    return qidx_ids
 
 
 def add_qidx(dcur, global_qidx):
-    idxs,rests = [],[]
-    # idx =-1
+    idxs, rests = [], []
+    # idx = -1
     for r in dcur["is_repeat"]:
-        if str(r) =='0':
-            global_qidx = global_qidx + 1
+        if str(r) == "0":
+            global_qidx += 1
         idxs.append(global_qidx)
+    # print(dcur["is_repeat"])
+    # print(f"idxs: {idxs}")
+    # print("="*20)
     for i in range(0, len(idxs)):
-        rests.append(idxs[i + 1:].count(idxs[i]))
+        rests.append(idxs[i+1:].count(idxs[i]))
     return idxs, rests, global_qidx
 
 
-def expand_question(dcur, global_qidx, pad_val = -1):
-    dextend, dlast = dict(),dict()
+def expand_question(dcur, global_qidx, pad_val=-1):
+    """
+   将一个问题的多个知识点扩展成多个序列。
+
+   对于一个用户的学习序列，如果一个问题包含多个知识点，那么将这个问题扩展成多个序列，每个序列只包含一个知识点。
+   每个序列除了包含问题、知识点、回答等信息外，还包含`selectmasks`信息，用于标记序列中的每一个位置是否有效。
+
+   Args:
+       dcur (dict): 当前用户的学习序列信息，包括问题、知识点、回答等。
+       global_qidx (int): 当前全局的问题索引，用于给新生成的序列赋予一个全局唯一的索引。
+       pad_val (int): 填充值，用于填充新生成的序列使其长度一致。
+
+   Returns:
+       dextend (dict): 扩展后的序列信息。
+       global_qidx (int): 更新后的全局问题索引。
+   """
+    dextend, dlast = dict(), dict()
     repeats = dcur["is_repeat"]
     last = -1
-    dcur["qidxs"], dcur["rest"],global_qidx = add_qidx(dcur, global_qidx)
+    dcur["qidxs"], dcur["rest"], global_qidx = add_qidx(dcur, global_qidx)
     for i in range(len(repeats)):
-        if str(repeats[i])=='0':
+        if str(repeats[i]) == "0":
             for key in dcur.keys():
                 if key in ONE_KEYS:
                     continue
                 dlast[key] = dcur[key][0: i]
-        if i==0:
+        if i == 0:
             for key in dcur.keys():
                 if key in ONE_KEYS:
                     continue
-                dextend.setdefault(key,[])
-                dextend[key].append(dcur[key][0])
-            dextend.setdefault("selectmasks",[])
+                dextend.setdefault(key, [])
+                dextend[key].append([dcur[key][0]])
+            dextend.setdefault("selectmasks", [])
             dextend["selectmasks"].append([pad_val])
         else:
+            # print(f"i: {i}, dlast: {dlast.keys()}")
             for key in dcur.keys():
                 if key in ONE_KEYS:
                     continue
-                dextend["selectmasks"][-1] +=[i]
-                if last == "0" and str(repeats[i])=="0":
+                dextend.setdefault(key, [])
+                if last == "0" and str(repeats[i]) == "0":
                     dextend[key][-1] += [dcur[key][i]]
                 else:
-                    dextend[key].append(dlast[key]+[dcur[key][i]])
-            dextend.setdefault("selectmasks",[])
-            if last == "0" and str(repeats[i])=="0":
+                    dextend[key].append(dlast[key] + [dcur[key][i]])
+            dextend.setdefault("selectmasks", [])
+            if last == "0" and str(repeats[i]) == "0":
                 dextend["selectmasks"][-1] += [1]
             elif len(dlast["responses"]) == 0:  # the first question
                 dextend["selectmasks"].append([pad_val])
             else:
                 dextend["selectmasks"].append(
                     len(dlast["responses"]) * [pad_val] + [1])
+
         last = str(repeats[i])
+
     return dextend, global_qidx
 
-def generate_question_sequences(df, effective_keys, window=True, min_seq_len=3, maxlen=200, pad_val = -1):
+
+def generate_question_sequences(df, effective_keys, window=True, min_seq_len=3, maxlen=200, pad_val=-1):
+    # 如果数据集中没有问题或知识点列，函数无法生成问题序列，所以直接返回
     if "questions" not in effective_keys or "concepts" not in effective_keys:
-        print(f"has no questions or concepts, has no question sequences")
-        return False,None
-    save_keys = list(effective_keys) + ["selectmasks","qidxs","rest","orirow"]
-    dres = {}
+        print(f"has no questions or concepts, has no question sequences!")
+        return False, None
+    save_keys = list(effective_keys) + \
+        ["selectmasks", "qidxs", "rest", "orirow"]
+    dres = {}  # "selectmasks": []}
     global_qidx = -1
     df["index"] = list(range(0, df.shape[0]))
-    for i,row in df.iterrows():
-        dcur = save_dcur(row,effective_keys)
+    for i, row in df.iterrows():
+        dcur = save_dcur(row, effective_keys)
         dcur["orirow"] = [row["index"]] * len(dcur["responses"])
 
-        dexpand,global_qidx = expand_question(dcur,global_qidx)
+        dexpand, global_qidx = expand_question(dcur, global_qidx)
         seq_num = len(dexpand["responses"])
         for j in range(seq_num):
             curlen = len(dexpand["responses"][j])
-            if curlen < 2: # 不预测第1个题
+            if curlen < 2:  # 如果子序列长度小于2，不预测第一个题，所以跳过
                 continue
-            if curlen < maxlen:
+            if curlen < maxlen:  # 如果子序列长度小于最大长度，进行填充
                 for key in dexpand:
                     pad_dim = maxlen - curlen
-                    paded_info = np.concatenate([dexpand[key][j][0:],np.array([pad_val] * pad_dim)])
-                    dres.setdefault(key,[])
+                    paded_info = np.concatenate(
+                        [dexpand[key][j][0:], np.array([pad_val] * pad_dim)])
+                    dres.setdefault(key, [])
                     dres[key].append(",".join([str(k) for k in paded_info]))
                 for key in ONE_KEYS:
-                    dres.setdefault(key,[])
+                    dres.setdefault(key, [])
                     dres[key].append(dcur[key])
             else:
-                # 超出范围设置window
+                # 如果子序列长度大于最大长度，需要进行切割
+                # 如果设置了窗口参数，使用滑动窗口的方式来切割子序列
                 if window:
                     if dexpand["selectmasks"][j][maxlen-1] == 1:
                         for key in dexpand:
-                            dres.setdefault(key,[])
-                            dres[key].append(",".join([str(k) for k in dexpand[key][j][0:maxlen]]))
+                            dres.setdefault(key, [])
+                            dres[key].append(
+                                ",".join([str(k) for k in dexpand[key][j][0:maxlen]]))
                         for key in ONE_KEYS:
-                            dres.setdefault(key,[])
+                            dres.setdefault(key, [])
                             dres[key].append(dcur[key])
 
-                    for n in range(maxlen+1,curlen+1):
+                    for n in range(maxlen+1, curlen+1):
                         if dexpand["selectmasks"][j][n-1] == 1:
                             for key in dexpand:
-                                dres.setdefault(key,[])
-                                if key =="selectmasks":
-                                    dres[key].append(",".join([str(pad_val)] * (maxlen - 1) + ["1"]))
+                                dres.setdefault(key, [])
+                                if key == "selectmasks":
+                                    dres[key].append(
+                                        ",".join([str(pad_val)] * (maxlen - 1) + ["1"]))
                                 else:
-                                    dres[key].append(",".join([str(k) for k in dexpand[key][j][n-maxlen: n]]))
-
+                                    dres[key].append(
+                                        ",".join([str(k) for k in dexpand[key][j][n-maxlen: n]]))
                             for key in ONE_KEYS:
-                                dres.setdefault(key,[])
+                                dres.setdefault(key, [])
                                 dres[key].append(dcur[key])
                 else:
-                    # no window
+                    # 如果没有设置窗口参数，按最大长度直接切割子序列
                     k = 0
                     rest = curlen
                     while curlen >= k + maxlen:
-                        rest = rest -maxlen
+                        rest = rest - maxlen
                         if dexpand["selectmasks"][j][k + maxlen - 1] == 1:
                             for key in dexpand:
-                                dres.setdefault(key,[])
-                                dres[key].append(",".join([str(s) for s in dexpand[key][j][k: k + maxlen]]))
+                                dres.setdefault(key, [])
+                                dres[key].append(
+                                    ",".join([str(s) for s in dexpand[key][j][k: k + maxlen]]))
                             for key in ONE_KEYS:
                                 dres.setdefault(key, [])
                                 dres[key].append(dcur[key])
                         k += maxlen
                     if rest < min_seq_len:  # 剩下长度<min_seq_len不预测
                         continue
-                    pad_dim = maxlen -rest
+                    pad_dim = maxlen - rest
                     for key in dexpand:
-                        dres.setdefault(key,[])
-                        paded_info = np.concatenate([dexpand[key][j][k:], np.array([pad_val] * pad_dim)])
-                        dres[key].append(",".join([str(s) for s in paded_info]))
+                        dres.setdefault(key, [])
+                        paded_info = np.concatenate(
+                            [dexpand[key][j][k:], np.array([pad_val] * pad_dim)])
+                        dres[key].append(",".join([str(s)
+                                         for s in paded_info]))
                     for key in ONE_KEYS:
-                        dres.setdefault(key,[])
+                        dres.setdefault(key, [])
                         dres[key].append(dcur[key])
+                #####
+
     dfinal = dict()
     for key in ALL_KEYS:
         if key in save_keys:
             dfinal[key] = dres[key]
     finaldf = pd.DataFrame(dfinal)
-    return True,finaldf
+    return True, finaldf
+
+
+def save_id2idx(dkeyid2idx, save_path):
+    with open(save_path, "w+") as fout:
+        fout.write(json.dumps(dkeyid2idx))
 
 
 def write_config(dataset_name, dkeyid2idx, effective_keys, configf, dpath, k=5, min_seq_len=3, maxlen=200, flag=False, other_config={}):
@@ -612,95 +608,171 @@ def write_config(dataset_name, dkeyid2idx, effective_keys, configf, dpath, k=5, 
         fout.write(data)
 
 
+def calStatistics(df, stares, key):
+    allin, allselect = 0, 0
+    allqs, allcs = set(), set()
+    for i, row in df.iterrows():
+        rs = row["responses"].split(",")
+        curlen = len(rs) - rs.count("-1")
+        allin += curlen
+        if "selectmasks" in row:
+            ss = row["selectmasks"].split(",")
+            slen = ss.count("1")
+            allselect += slen
+        if "concepts" in row:
+            cs = row["concepts"].split(",")
+            fc = list()
+            for c in cs:
+                cc = c.split("_")
+                fc.extend(cc)
+            curcs = set(fc) - {"-1"}
+            allcs |= curcs
+        if "questions" in row:
+            qs = row["questions"].split(",")
+            curqs = set(qs) - {"-1"}
+            allqs |= curqs
+    stares.append(",".join([str(s)
+                  for s in [key, allin, df.shape[0], allselect]]))
+    return allin, allselect, len(allqs), len(allcs), df.shape[0]
+
+
+def get_max_concepts(df):
+    """
+       计算数据集中的问题所包含的最大知识点数量。
+
+       遍历数据集的每一行，对 "concepts" 列中的知识点进行分割，并计算每个问题包含的知识点数量。最后返回最大的知识点数量。
+
+       参数:
+           df (pandas.DataFrame): 数据集，其中包含一个 "concepts" 列，该列中的每个条目都是以逗号分隔的知识点字符串。
+
+       返回:
+           int: 数据集中问题所包含的最大知识点数量。
+       """
+    max_concepts = 1
+    for i, row in df.iterrows():
+        cs = row["concepts"].split(",")
+        num_concepts = max([len(c.split("_")) for c in cs])
+        if num_concepts >= max_concepts:
+            max_concepts = num_concepts
+    return max_concepts
+
+
 def main(dname, fname, dataset_name, configf, min_seq_len=3, maxlen=200, kfold=5):
-        stares = []
-        total_df, effective_keys = read_data(fname)
-        # print(total_df)
-        total_df.to_csv('../data/statics2011/total_df.csv', index=False)
-        # print(effective_keys)
-        if 'concepts' in effective_keys:
-            max_concepts = get_max_concepts(total_df)
-        else:
-            max_concepts = -1
-        # print(max_concepts)
+    """split main function
 
-        oris, _, qs, cs, seqnum = calStatistics(total_df, stares, "original")
-        print("=" * 20)
-        print(f"original total interactions: {oris}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
+    Args:
+        dname (str): data folder path
+        fname (str): the data file used to split, needs 6 columns, format is: (NA indicates the dataset has no corresponding info)
+            uid,seqlen: 50121,4
+            quetion ids: NA
+            concept ids: 7014,7014,7014,7014
+            responses: 0,1,1,1
+            timestamps: NA
+            cost times: NA
+        dataset_name (str): dataset name
+        configf (str): the dataconfig file path
+        min_seq_len (int, optional): the min seqlen, sequences less than this value will be filtered out. Defaults to 3.
+        maxlen (int, optional): the max seqlen. Defaults to 200.
+        kfold (int, optional): the folds num needs to split. Defaults to 5.
 
-        total_df, effective_keys = extend_multi_concepts(total_df, effective_keys)
-        total_df, dkeyid2idx = id_mapping(total_df)
-        dkeyid2idx["max_concepts"] = max_concepts
+    """
+    stares = []
 
-        extends, _, qs, cs, seqnum = calStatistics(
-            total_df, stares, "extend multi")
-        print("=" * 20)
-        print(
-            f"after extend multi, total interactions: {extends}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
-        save_id2idx(dkeyid2idx, os.path.join(dname, "keyid2idx.json"))
+    total_df, effective_keys = read_data(fname)
+    # cal max_concepts
+    if 'concepts' in effective_keys:
+        max_concepts = get_max_concepts(total_df)
+    else:
+        max_concepts = -1
 
-        # train test split & generate sequences
-        train_df, test_df = train_test_split(total_df, 0.2)
-        splitdf = KFold_split(train_df, kfold)
-        print(splitdf)
+    oris, _, qs, cs, seqnum = calStatistics(total_df, stares, "original")
+    print("="*20)
+    print(
+        f"original total interactions: {oris}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
 
-        # to csv
-        config = []
-        for key in ALL_KEYS:
-            if key in effective_keys:
-                config.append(key)
-        print(effective_keys)
-        splitdf[config].to_csv(os.path.join(dname, "train_valid.csv"), index=None)  # 选取effective_keys列存储
+    total_df, effective_keys = extend_multi_concepts(total_df, effective_keys)
+    total_df, dkeyid2idx = id_mapping(total_df)
+    dkeyid2idx["max_concepts"] = max_concepts
 
-        # original train+valid
+    extends, _, qs, cs, seqnum = calStatistics(
+        total_df, stares, "extend multi")
+    print("="*20)
+    print(
+        f"after extend multi, total interactions: {extends}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
+
+    save_id2idx(dkeyid2idx, os.path.join(dname, "keyid2idx.json"))
+    effective_keys.add("fold")
+    config = []
+    for key in ALL_KEYS:
+        if key in effective_keys:
+            config.append(key)
+    # train test split & generate sequences
+    train_df, test_df = train_test_split(total_df, 0.2)
+    splitdf = KFold_split(train_df, kfold)
+    # TODO
+    splitdf[config].to_csv(os.path.join(dname, "train_valid.csv"), index=None)
+    ins, ss, qs, cs, seqnum = calStatistics(
+        splitdf, stares, "original train+valid")
+    print(
+        f"train+valid original interactions num: {ins}, select num: {ss}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
+    split_seqs = generate_sequences(
+        splitdf, effective_keys, min_seq_len, maxlen)
+    ins, ss, qs, cs, seqnum = calStatistics(
+        split_seqs, stares, "train+valid sequences")
+    print(
+        f"train+valid sequences interactions num: {ins}, select num: {ss}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
+    split_seqs.to_csv(os.path.join(dname, "train_valid_sequences.csv"), index=None)
+    # print(f"split seqs dtypes: {split_seqs.dtypes}")
+
+    # add default fold -1 to test!
+    test_df["fold"] = [-1] * test_df.shape[0]
+    test_df['cidxs'] = get_inter_qidx(test_df)  # add index
+    ins, ss, qs, cs, seqnum = calStatistics(test_df, stares, "test original")
+    print(f"original test interactions num: {ins}, select num: {ss}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
+
+    test_seqs = generate_sequences(test_df, list(
+        effective_keys) + ['cidxs'], min_seq_len, maxlen)
+    ins, ss, qs, cs, seqnum = calStatistics(test_seqs, stares, "test sequences")
+    print(f"test sequences interactions num: {ins}, select num: {ss}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
+    print("="*20)
+
+    test_window_seqs = generate_window_sequences(
+        test_df, list(effective_keys) + ['cidxs'], maxlen)
+
+    # choice
+    flag, test_question_seqs = generate_question_sequences(
+        test_df, effective_keys, False, min_seq_len, maxlen)   # 对长度超过maxlen的序列进行截断处理 (序列没有重叠)
+    flag, test_question_window_seqs = generate_question_sequences(
+        test_df, effective_keys, True, min_seq_len, maxlen)   # 对长度超过maxlen的序列进行滑动窗口处理 (序列存在重叠)
+
+    test_df = test_df[config+['cidxs']]
+
+    test_df.to_csv(os.path.join(dname, "test.csv"), index=None)
+    test_seqs.to_csv(os.path.join(dname, "test_sequences.csv"), index=None)
+    test_window_seqs.to_csv(os.path.join(dname, "test_window_sequences.csv"), index=None)
+
+    ins, ss, qs, cs, seqnum = calStatistics(
+        test_window_seqs, stares, "test window")
+    print(
+        f"test window interactions num: {ins}, select num: {ss}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
+
+    if flag:
+        test_question_seqs.to_csv(os.path.join(
+            dname, "test_question_sequences.csv"), index=None)  # 截断处理
+        test_question_window_seqs.to_csv(os.path.join(
+            dname, "test_question_window_sequences.csv"), index=None)  # 滑动处理
+
         ins, ss, qs, cs, seqnum = calStatistics(
-            splitdf, stares, "original train+valid")
+            test_question_seqs, stares, "test question")
         print(
-            f"original train+valid interactions num: {ins}, select num: {ss}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
+            f"test question interactions num: {ins}, select num: {ss}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
+        ins, ss, qs, cs, seqnum = calStatistics(
+            test_question_window_seqs, stares, "test question window")
+        print(
+            f"test question window interactions num: {ins}, select num: {ss}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
 
-        #
-        split_seqs = generate_sequences(splitdf, effective_keys, min_seq_len, maxlen)
-        # print(split_seqs)
-        ins, ss, qs, cs, seqnum = calStatistics(split_seqs, stares, "train+valid sequences")
-        print(f"train+valid sequences interactions num: {ins}, select num: {ss}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
-        split_seqs.to_csv(os.path.join(dname, "train_valid_sequences.csv"), index=None)
+    write_config(dataset_name=dataset_name, dkeyid2idx=dkeyid2idx, effective_keys=effective_keys,
+                 configf=configf, dpath=dname, k=kfold, min_seq_len=min_seq_len, maxlen=maxlen, flag=flag)
 
-        # add default fold -1 to test!
-        test_df["fold"] = [-1]*test_df.shape[0] # 添加fold=-1列
-        test_df["cidxs"] = get_inter_qidx(test_df)
-        test_seqs = generate_sequences(test_df, list(effective_keys)+['cidxs'], min_seq_len,maxlen)
-        ins,ss,qs,cs,seqnum = calStatistics(test_df, stares, "test original")
-        print(f"original test interaction num: {ins},select num: {ss}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
-        ins,ss,qs,cs,seqnum = calStatistics(test_seqs, stares,"test sequences")
-        print(f"test sequence interactions num: {ins},select num: {ss}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
-        print("="*20)
-
-        test_window_seqs = generate_window_sequences(test_df, list(effective_keys) + ['cidxs'], maxlen)
-        flag, test_question_seqs = generate_question_sequences(test_df,effective_keys,False,min_seq_len,maxlen) # False
-        flag, test_question_window_seqs = generate_question_sequences(test_df, effective_keys, True, min_seq_len, maxlen)
-
-        test_df = test_df[config + ["cidxs"]]
-        test_df.to_csv(os.path.join(dname,"test.csv"), index=None)
-        test_seqs.to_csv(os.path.join(dname,"test_sequences.csv"),index=None)
-        test_window_seqs.to_csv(os.path.join(dname, "test_window_sequences.csv"),index=None)
-        ins, ss, qs, cs, seqnum = calStatistics(test_window_seqs, stares, "test window")
-        print(f"test window interactions num: {ins},select num: {ss}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
-
-        # print(test_df)
-        # print(test_seqs)
-        # print(test_window_seqs)
-
-        if flag:
-            test_question_seqs.to_csv(os.path.join(dname, "test_question_sequences.csv"),index=None)
-            test_question_window_seqs.to_csv(os.path.join(dname,"test_question_window_sequences.csv"),index=None)
-
-            ins,ss,qs,cs,seqnum = calStatistics(test_question_seqs,stares,"test question")
-            print(f"test question interactions num: {ins}, select num: {ss}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
-            ins, ss, qs, cs, seqnum = calStatistics(test_question_window_seqs, stares, "test question")
-            print(f"test question window interactions num: {ins}, select num: {ss}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
-
-
-        write_config(dataset_name=dataset_name, dkeyid2idx=dkeyid2idx, effective_keys=effective_keys,configf=configf,dpath=dname,k=kfold,min_seq_len=min_seq_len,maxlen=maxlen,flag=flag)
-
-        print("="*20)
-        print("\n".join(stares))
+    print("="*20)
+    print("\n".join(stares))

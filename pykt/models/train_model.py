@@ -158,7 +158,7 @@ def model_forward(model, data):
         # y = model(cc[0:1,0:5].long(), cq[0:1,0:5].long(), ct[0:1,0:5].long(), cr[0:1,0:5].long(), csm[0:1,0:5].long())
         y = model(cc.long(), cq.long(), ct.long(), cr.long())  # , csm.long())
         ys.append(y[:, 1:])
-    elif model_name in que_type_models:
+    elif model_name in que_type_models:  # qDKT
         y, loss = model.train_one_step(data)
     elif model_name == "dimkt":
         y = model(q.long(),c.long(),sd.long(),qd.long(),r.long(),
@@ -185,9 +185,9 @@ def train_model(model, train_loader, valid_loader, num_epochs, opt, ckpt_path, t
         for data in train_loader:
             train_step += 1  # 更新训练步数
             if model.model_name in que_type_models:
-                model.model.train()
+                model.model.train(True),
             else:
-                model.train()
+                model.train(True),
             # 前向传播计算损失函数
             loss = model_forward(model, data)
             opt.zero_grad()  # 清空梯度

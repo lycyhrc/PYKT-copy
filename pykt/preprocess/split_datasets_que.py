@@ -182,15 +182,15 @@ def main(dname, fname, dataset_name, configf, min_seq_len=3, maxlen = 200, kfold
     # train test split
     train_df, test_df = train_test_split(total_df, 0.2)
     splitdf = KFold_split(train_df, kfold)
-    splitdf[df_save_keys].to_csv(os.path.join(dname, "train_valid_question.csv"),index=None)
+    splitdf[df_save_keys].to_csv(os.path.join(dname, "train_valid_quelevel.csv"),index=None)
     ins, ss, qs, cs, seqnum = calStatistics(splitdf, stares, "original train+valid question level")
     print(f"train+valid original interactions num: {ins}, select num: {ss}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
-    print(splitdf)
+    # print(splitdf)
     # generate sequences
     split_seqs = generate_sequences(splitdf, effective_keys, min_seq_len, maxlen)
     ins,ss,qs,cs,seqnum = calStatistics(split_seqs, stares,"train+valid sequences question level")
     print(f"train+valid sequences interactions num: {ins}, select num: {ss}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
-    # split_seqs.to_csv(os.path.join(dname, "train_valid_sequences_quelevel.csv"), index=None)
+    split_seqs.to_csv(os.path.join(dname, "train_valid_sequences_quelevel.csv"), index=None)
 
     # for test dataset
     # add default fold -1 to test
@@ -208,6 +208,7 @@ def main(dname, fname, dataset_name, configf, min_seq_len=3, maxlen = 200, kfold
     print(f"test window interactions num: {ins}, select num: {ss}, qs: {qs}, cs: {cs}, seqnum: {seqnum}")
 
     # sava csv
+    test_df = test_df[df_save_keys]
     test_df.to_csv(os.path.join(dname, "test_quelevel.csv"), index=None)
     test_seqs.to_csv(os.path.join(dname, "test_sequences_quelevel.csv"), index=None)
     test_window_seqs.to_csv(os.path.join(dname, "test_window_sequences_quelevel.csv"), index=None)
