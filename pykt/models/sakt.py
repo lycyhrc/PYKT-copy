@@ -28,12 +28,12 @@ class SAKT(Module):
         self.dropout_layer = Dropout(dropout)
         self.pred = Linear(self.emb_size, 1)
 
-    def base_emb(self, q, r, qry):
+    def base_emb(self, q, r, qry):  # BS * sl
         x = q + self.num_c * r
         qshftemb, xemb = self.exercise_emb(qry), self.interaction_emb(x)
-
-        posemb = self.positional_emb(pos_encode(xemb.shape[1]))
-        xemb = xemb + posemb
+        # BS * sl * es  BS * sl * es
+        posemb = self.positional_emb(pos_encode(xemb.shape[1]))    # 1 * sl ---  1 * sl * es
+        xemb = xemb + posemb  # BS * sl * es（广播机制）
         return qshftemb, xemb
 
     def forward(self, q, r, qry, qtest=False):
@@ -43,18 +43,18 @@ class SAKT(Module):
             exemb, xemb = self.base_emb(q, r, qry)
 
         for i in range(self.num_en):
-            xemb = self.blocks[i](exemb, xemb, xemb)  # q, k, v Figure 2b
+            xemb = self.blocks[i](exemb, xemb, xemb)  # q, k, v Figure 2b    BS*sl*es
 
         # 输出
-        xemb = self.dropout_layer(xemb)  # 对memb应用dropout层 # BS*ls*dl
+        xemb = self.dropout_layer(xemb)  # 对xemb应用dropout层 # BS*sl*dl  隐藏层状态
         pred = self.pred(xemb)  # 使用一个线性层对dropout后的结果进行预测   # BS*ls*1
         p = torch.sigmoid(pred)
-        # 最后，我们使用squeeze方法以消除维度大小为1的维度。在这里，squeeze(-1)表示我们要消除最后一个维度（如果它的大小是1）。
+        # 使用squeeze方法以消除维度大小为1的维度
         p = p.squeeze(-1)
         if not qtest:
-            return p
+            return p    # BS*sl
         else:
-            return p, xemb
+            return p, xemb    # BS*sl BS*sl*dl隐藏层状态
 
 
 class Blocks(Module):
@@ -70,11 +70,12 @@ class Blocks(Module):
         self.FFN_layer_norm = LayerNorm(emb_size)
 
     def forward(self, q=None, k=None, v=None):
-        q, k, v = q.permute(1, 0, 2), k.permute(1, 0, 2), v.permute(1, 0, 2)  # 维度置换（序列长度，批次大小，嵌入维度）
+        q, k, v = q.permute(1, 0, 2), k.permute(1, 0, 2), v.permute(1, 0, 2)  # sl * BS * es
         # attn -> drop -> skip -> norm
         # transformer: attn -> drop -> skip -> norm transformer default
         causal_mask = ut_mask(seq_len=k.shape[0])  # 使用因果mask，即只允许在计算attention时当前位置的词看到它之前的词
-        attn_emb, _ = self.attn_multi(q, k, v, attn_mask=causal_mask)  # 调用多头注意力模块进行计算，得到注意力后的向量表示 sl*BS*dl
+        attn_emb, _ = self.attn_multi(q, k, v, attn_mask=causal_mask)  # 调用多头注意力模块进行计算，得到注意力后的向量表示 sl *BS*es
+        # 对于2-200的每一个题目，现在都有一个考虑了学生1-199的回答的上下文表示
 
         attn_emb = self.attn_dropout(attn_emb)
         attn_emb, q = attn_emb.permute(1, 0, 2), q.permute(1, 0, 2)  # BS*ls*dl
