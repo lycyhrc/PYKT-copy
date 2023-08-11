@@ -22,7 +22,7 @@ def cal_loss(model, ys, r, rshft, sm, preloss=[]):
         t = torch.masked_select(rshft, sm)
         loss = binary_cross_entropy(y.double(), t.double())
 
-    elif model_name in ["atdkt", "simplekt", "bakt_time", "sparsekt"]:
+    elif model_name in ["sparsekt","simplekt", "atdkt", "bakt_time"]:
         # 对于这些模型，使用二元交叉熵损失函数，并根据不同的嵌入类型计算整体损失
         y = torch.masked_select(ys[0], sm)
         t = torch.masked_select(rshft, sm)
@@ -109,9 +109,9 @@ def model_forward(model, data):
         y_next = (y * one_hot(cshft.long(), model.num_c)).sum(-1)
         y_curr = (y * one_hot(c.long(), model.num_c)).sum(-1)
         ys = [y_next, y_curr, y]
-    elif model_name in ["simplekt", "sparsekt"]:
+    elif model_name in ["sparsekt","simplekt"]:
         y, y2, y3 = model(dcur, train=True)
-        ys = [y[:, 1:], y2, y3]
+        ys = [y[:, 1:], y2, y3] # y2,y3未计算
     elif model_name in ["dkt_forget"]:
         y = model(c.long(), r.long(), dgaps)
         y = (y * one_hot(cshft.long(), model.num_c)).sum(-1)
@@ -144,6 +144,13 @@ def model_forward(model, data):
         # adv_loss = cal_loss(model, [pred_res], r, rshft, sm)
         # loss = loss + model.beta * adv_loss
         pass
+    if model_name in ["atdkt"]:
+        # is_repeat = dcur["is_repeat"]
+        y, y2, y3 = model(dcur, train=True)  # BS*sl*num_c,0,0
+        if model.emb_type.find("bkt") == -1 and model.emb_type.find("addcshft") == -1:
+            y = (y * one_hot(cshft.long(), model.num_c)).sum(-1)  # BS*sl
+        # y2 = (y2 * one_hot(cshft.long(), model.num_c)).sum(-1)
+        ys = [y, y2, y3]  # first: yshft
     elif model_name == "gkt":
         y = model(cc.long(), cr.long())
         ys.append(y)
@@ -165,7 +172,7 @@ def model_forward(model, data):
                   qdshft.long(),cshft.long(),sdshft.long(),qdshft.long())
         ys.append(y)
 
-    # 对于大多数模型，计算损失值并返回
+    # que-level模型不在此计算
     if model_name not in ["atkt", "atktfix"]+que_type_models or model_name in ["lpkt", "rkt"]:
         loss = cal_loss(model, ys, r, rshft, sm, preloss)
     return loss
@@ -178,12 +185,13 @@ def train_model(model, train_loader, valid_loader, num_epochs, opt, ckpt_path, t
     # 对于LPKT模型，使用学习率调整策略
     if model.model_name == 'lpkt':
         scheduler = torch.optim.lr_scheduler.StepLR(opt, 10, gamma=0.5)
-    # 进行num_epochs轮训练
+    # 进行num_epochs轮训练，最大值200
     for i in range(1, num_epochs + 1):
         loss_mean = []  # 记录每个epoch的平均损失
         # 遍历训练集中的每个batch进行训练
         for data in train_loader:
             train_step += 1  # 更新训练步数
+            # 将模型切换到训练模式
             if model.model_name in que_type_models:
                 model.model.train(True),
             else:
