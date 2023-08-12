@@ -10,6 +10,7 @@ from .kqn import KQN
 from .qdkt import QDKT
 from .sakt import SAKT
 from .saint import SAINT
+from .simplekt import simpleKT
 from .sparsekt import sparseKT
 
 device = "cpu" if not torch.cuda.is_available() else "cuda"
@@ -37,6 +38,9 @@ def init_model(model_name, model_config, data_config, emb_type):
     elif model_name == "atdkt":
         model = ATDKT(data_config["num_q"], data_config["num_c"], **model_config, emb_type=emb_type,
                       emb_path=data_config["emb_path"]).to(device)
+    elif model_name == "simplekt":
+        model = simpleKT(data_config["num_c"], data_config["num_q"], **model_config, emb_type=emb_type,
+                         emb_path=data_config["emb_path"]).to(device)
     else:
         print("The wrong model name was used...")
         return None

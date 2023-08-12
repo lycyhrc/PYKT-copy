@@ -111,7 +111,7 @@ def model_forward(model, data):
         ys = [y_next, y_curr, y]
     elif model_name in ["sparsekt","simplekt"]:
         y, y2, y3 = model(dcur, train=True)
-        ys = [y[:, 1:], y2, y3] # y2,y3未计算
+        ys = [y[:, 1:], y2, y3]  # y2,y3在simplekt未计算，y1使用后199题
     elif model_name in ["dkt_forget"]:
         y = model(c.long(), r.long(), dgaps)
         y = (y * one_hot(cshft.long(), model.num_c)).sum(-1)
