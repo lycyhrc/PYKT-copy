@@ -1,5 +1,4 @@
 import os
-
 import numpy as np
 import torch
 
@@ -18,21 +17,20 @@ class DKT(Module):
         if emb_type.startswith("qid"):
             self.interaction_emb = Embedding(self.num_c * 2, self.emb_size)
 
-        self.lstm_layer = LSTM(self.emb_size, self.hidden_size, batch_first=True)
+        self.lstm_layer = LSTM(self.emb_size, self.hidden_size, batch_first=True)   # (BS,sl) when batch_first=True
         self.dropout_layer = Dropout(dropout)
         self.out_layer = Linear(self.hidden_size, self.num_c)
 
     def forward(self, q, r):
-        # print(f"q.shape is {q.shape}")
 
         emb_type = self.emb_type
         if emb_type == "qid":
-            x = q + self.num_c * r   # BS * sl
-            xemb = self.interaction_emb(x)    # BS * sl * dl
-        print(f"xemb.shape is {xemb.shape}")
-        h, _ = self.lstm_layer(xemb)
-        h = self.dropout_layer(h)  # BS * sl * dl
-        y = self.out_layer(h)
-        y = torch.sigmoid(y)  # BS * sl * num_c
+            x = q + self.num_c * r   # [BS, sl-1] 问题ID和回答结果的信息结合在一起,在一个统一的嵌入空间中表示问题和回答的交互
+            xemb = self.interaction_emb(x)    # [BS, sl-1, es]
+        
+        h, _ = self.lstm_layer(xemb)  # [BS, sl-1, hs]
+        h = self.dropout_layer(h)  
+        y = self.out_layer(h)   # [BS, sl-1, num_c]
+        y = torch.sigmoid(y)  
 
-        return y
+        return y # [BS, sl-1, num_c]
