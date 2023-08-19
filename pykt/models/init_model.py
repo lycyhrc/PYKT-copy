@@ -6,6 +6,9 @@ from .atdkt import ATDKT
 from .dimkt import DIMKT
 from .dkt import DKT
 from .dkt_forget import DKTForget
+from .dkvmn import DKVMN
+from .hawkes import HawkesKT
+from .iekt import IEKT
 from .kqn import KQN
 from .qdkt import QDKT
 from .sakt import SAKT
@@ -41,6 +44,21 @@ def init_model(model_name, model_config, data_config, emb_type):
     elif model_name == "simplekt":
         model = simpleKT(data_config["num_c"], data_config["num_q"], **model_config, emb_type=emb_type,
                          emb_path=data_config["emb_path"]).to(device)
+    elif model_name == "dkvmn":
+        model = DKVMN(data_config["num_c"], **model_config, emb_type=emb_type, emb_path=data_config["emb_path"]).to(
+            device)
+    elif model_name == "iekt":  # max_concepts
+        model = IEKT(num_q=data_config['num_q'], num_c=data_config['num_c'],
+                     max_concepts=data_config['max_concepts'], **model_config, emb_type=emb_type,
+                     emb_path=data_config["emb_path"], device=device).to(device)
+    elif model_name == "hawkes":
+        if data_config["num_q"] == 0 or data_config["num_c"] == 0:
+            print(f"model: {model_name} needs questions ans concepts! but the dataset has no both")
+            return None
+        model = HawkesKT(data_config["num_c"], data_config["num_q"], **model_config)
+        model = model.double()
+        model.apply(model.init_weights)
+        model = model.to(device)
     else:
         print("The wrong model name was used...")
         return None
