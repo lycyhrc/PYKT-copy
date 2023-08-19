@@ -28,16 +28,16 @@ class QDKTNet(Module):
 
     def forward(self, q, c,r,data=None):
         # 前向传播方法，定义了网络计算流程
-        x = (q + self.num_q * r)[:,:-1]  # 前N-1个question-responses序列
-        xemb = self.interaction_emb(x)
-        h, _ = self.lstm_layer(xemb)
+        x = (q + self.num_q * r)[:,:-1]  # [BS,sl-1]
+        xemb = self.interaction_emb(x)   # [BS, sl-1, es]
+        h, _ = self.lstm_layer(xemb)  # [BS, sl-1, hs]
         h = self.dropout_layer(h)
-        y = self.out_layer(h)
+        y = self.out_layer(h)   # [BS,sl-1,num_q]
         y = torch.sigmoid(y)
 
-        y = (y * F.one_hot(data['qshft'].long(), self.num_q)).sum(-1)
+        y = (y * F.one_hot(data['qshft'].long(), self.num_q)).sum(-1) # 2-200问题编码为 [BS,sl-1,num_q],逐元素乘法，最后一维度sum
 
-        return y
+        return y  # [BS,sl-1]
 
 
 # QDKT是一个扩展自QueBaseModel的模型类，包含了一个QDKTNet对象以及一些训练和预测的方法
@@ -57,14 +57,15 @@ class QDKT(QueBaseModel):
         self.loss_func = self._get_loss_func("binary_crossentropy")
 
     def train_one_step(self, data, process=True, return_all=False):
-        outputs, data_new = self.predict_one_step(data, return_details=True, process=process)
-        loss = self.get_loss(outputs, data_new['rshft'], data_new['sm'])
+        outputs, data_new = self.predict_one_step(data, return_details=True, process=process)    # [BS,sl-1]
+        loss = self.get_loss(outputs, data_new['rshft'], data_new['sm'])  # predict labels
         return outputs,loss
 
     def predict_one_step(self, data, return_details=False,process=True):
         data_new = self.batch_to_device(data, process=process)
+
         outputs = self.model(data_new['cq'].long(), data_new['cc'], data_new['cr'].long(), data=data_new) # 前N条
         if return_details:
-            return outputs, data_new
+            return outputs, data_new  # [BS,sl-1],dict
         else:
             return outputs
