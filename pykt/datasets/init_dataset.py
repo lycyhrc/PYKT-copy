@@ -2,6 +2,10 @@ import os,sys
 
 from torch.utils.data import DataLoader
 
+from pykt.datasets.lpkt_dataloader import LPKTDataset
+from pykt.datasets.lpkt_utils import generate_time2idx
+
+from .atdkt_dataloader import ATDKTDataset
 from .data_loader import KTDataset
 from .dimkt_dataloader import DIMKTDataset
 from .dkt_forget_dataloader import DktForgetDataset
@@ -51,12 +55,12 @@ def init_test_datasets(data_config, model_name, batch_size, diff_level=None):
     #                     concept_num=data_config['num_c'], max_concepts=data_config['max_concepts'])
     #     test_question_dataset = None
     #     test_question_window_dataset= None
-    # elif model_name in ["atdkt"]:
-    #     test_dataset = ATDKTDataset(os.path.join(data_config["dpath"], data_config["test_file"]), data_config["input_type"], {-1})
-    #     test_window_dataset = ATDKTDataset(os.path.join(data_config["dpath"], data_config["test_window_file"]), data_config["input_type"], {-1})
-    #     if "test_question_file" in data_config:
-    #         test_question_dataset = ATDKTDataset(os.path.join(data_config["dpath"], data_config["test_question_file"]), data_config["input_type"], {-1}, True)
-    #         test_question_window_dataset = ATDKTDataset(os.path.join(data_config["dpath"], data_config["test_question_window_file"]), data_config["input_type"], {-1}, True)
+    elif model_name in ["atdkt"]:
+        test_dataset = ATDKTDataset(os.path.join(data_config["dpath"], data_config["test_file"]), data_config["input_type"], {-1})
+        test_window_dataset = ATDKTDataset(os.path.join(data_config["dpath"], data_config["test_window_file"]), data_config["input_type"], {-1})
+        if "test_question_file" in data_config:
+            test_question_dataset = ATDKTDataset(os.path.join(data_config["dpath"], data_config["test_question_file"]), data_config["input_type"], {-1}, True)
+            test_question_window_dataset = ATDKTDataset(os.path.join(data_config["dpath"], data_config["test_question_window_file"]), data_config["input_type"], {-1}, True)
     # elif model_name in ["dimkt"]:
     #     test_dataset = DIMKTDataset(data_config["dpath"],os.path.join(data_config["dpath"], data_config["test_file"]), data_config["input_type"], {-1}, diff_level=diff_level)
     #     test_window_dataset = DIMKTDataset(data_config["dpath"],os.path.join(data_config["dpath"], data_config["test_window_file"]), data_config["input_type"], {-1}, diff_level=diff_level)
@@ -72,6 +76,7 @@ def init_test_datasets(data_config, model_name, batch_size, diff_level=None):
             test_question_dataset = KTDataset(os.path.join(data_config["dpath"], data_config["test_question_file"]), data_config["input_type"], {-1}, True)
             test_question_window_dataset = KTDataset(os.path.join(data_config["dpath"], data_config["test_question_window_file"]), data_config["input_type"], {-1}, True)
 
+    # 初始化为DataLoader形式
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
     test_window_loader = DataLoader(test_window_dataset, batch_size=batch_size, shuffle=False)
     if "test_question_file" in data_config:
@@ -81,7 +86,10 @@ def init_test_datasets(data_config, model_name, batch_size, diff_level=None):
             test_question_loader = DataLoader(test_question_dataset, batch_size=batch_size, shuffle=False)
         if not test_question_window_dataset is None:
             test_question_window_loader = DataLoader(test_question_window_dataset, batch_size=batch_size, shuffle=False)
-
+    for i, batch in enumerate(test_loader):
+        print(batch)
+        if i == 2:  # 停止打印数据 after 5 batches
+            break
     return test_loader, test_window_loader, test_question_loader, test_question_window_loader
 
 def update_gap(max_rgap, max_sgap, max_pcount, cur):
@@ -122,7 +130,7 @@ def init_dataset4train(dataset_name, model_name, data_config, i, batch_size, dif
         curtrain = DktForgetDataset(
             os.path.join(data_config["dpath"], data_config["train_valid_file"]),
             data_config["input_type"], all_folds - {i})
-        # 更新最大的回顾间隔，学习间隔和问题出现次数
+        # 更新最大的回顾间隔，学习间隔和问题出现次数，确保得到的最大值是在整个数据集（包括训练集和验证集）中的最大值，从而能够正确地处理这些特征
         max_rgap, max_sgap, max_pcount = update_gap(max_rgap, max_sgap, max_pcount, curtrain)
         max_rgap, max_sgap, max_pcount = update_gap(max_rgap, max_sgap, max_pcount, curvalid)
     elif model_name in que_type_models:
@@ -133,35 +141,28 @@ def init_dataset4train(dataset_name, model_name, data_config, i, batch_size, dif
                                 input_type=data_config["input_type"], folds=all_folds-{i},
                                 concept_num=data_config["num_c"], max_concepts=data_config['max_concepts'])
 
-    # elif model_name == "lpkt":
-    #     at2idx, it2idx = generate_time2idx(data_config)
-    #     # json_str = json.dumps(at2idx)
-    #     # with open('at2idx.json', 'w') as json_file:
-    #     #     json_file.write(json_str)
-    #     # json_str_2 = json.dumps(it2idx)
-    #     # with open('it2idx.json', 'w') as json_file2:
-    #     #     json_file2.write(json_str_2)
-    #     curvalid = LPKTDataset(os.path.join(data_config["dpath"], data_config["train_valid_file_quelevel"]), at2idx,
-    #                            it2idx, data_config["input_type"], {i})
-    #     curtrain = LPKTDataset(os.path.join(data_config["dpath"], data_config["train_valid_file_quelevel"]), at2idx,
-    #                            it2idx, data_config["input_type"], all_folds - {i})
+    elif model_name == "lpkt":
+        at2idx, it2idx = generate_time2idx(data_config)
+        # json_str = json.dumps(at2idx)
+        # with open('at2idx.json', 'w') as json_file:
+        #     json_file.write(json_str)
+        # json_str_2 = json.dumps(it2idx)
+        # with open('it2idx.json', 'w') as json_file2:
+        #     json_file2.write(json_str_2)
+        curvalid = LPKTDataset(os.path.join(data_config["dpath"], data_config["train_valid_file_quelevel"]), at2idx,
+                               it2idx, data_config["input_type"], {i})
+        curtrain = LPKTDataset(os.path.join(data_config["dpath"], data_config["train_valid_file_quelevel"]), at2idx,
+                               it2idx, data_config["input_type"], all_folds - {i})
     # elif model_name in ["rkt"] and dataset_name in ["statics2011", "assist2015", "poj"]:
     #     curvalid = KTDataset(os.path.join(data_config["dpath"], data_config["train_valid_file"]),
     #                          data_config["input_type"], {i})
     #     curtrain = KTDataset(os.path.join(data_config["dpath"], data_config["train_valid_file"]),
     #                          data_config["input_type"], all_folds - {i})
-    # elif model_name in que_type_models:
-    #     curvalid = KTQueDataset(os.path.join(data_config["dpath"], data_config["train_valid_file_quelevel"]),
-    #                             input_type=data_config["input_type"], folds={i},
-    #                             concept_num=data_config['num_c'], max_concepts=data_config['max_concepts'])
-    #     curtrain = KTQueDataset(os.path.join(data_config["dpath"], data_config["train_valid_file_quelevel"]),
-    #                             input_type=data_config["input_type"], folds=all_folds - {i},
-    #                             concept_num=data_config['num_c'], max_concepts=data_config['max_concepts'])
-    # elif model_name in ["atdkt"]:
-    #     curvalid = ATDKTDataset(os.path.join(data_config["dpath"], data_config["train_valid_file"]),
-    #                             data_config["input_type"], {i})
-    #     curtrain = ATDKTDataset(os.path.join(data_config["dpath"], data_config["train_valid_file"]),
-    #                             data_config["input_type"], all_folds - {i})
+    elif model_name in ["atdkt"]:
+        curvalid = ATDKTDataset(os.path.join(data_config["dpath"], data_config["train_valid_file"]),
+                                data_config["input_type"], {i})
+        curtrain = ATDKTDataset(os.path.join(data_config["dpath"], data_config["train_valid_file"]),
+                                data_config["input_type"], all_folds - {i})
     elif model_name == "dimkt":
         curvalid = DIMKTDataset(data_config["dpath"],
                                 os.path.join(data_config["dpath"], data_config["train_valid_file"]),

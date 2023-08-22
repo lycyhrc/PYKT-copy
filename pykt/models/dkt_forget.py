@@ -23,6 +23,7 @@ class DKTForget(Module):
         self.out_layer = Linear(self.hidden_size+n_total, self.num_c)
 
     def forward(self, q, r, dgaps):
+        # "rgaps"：表示问题之间的相对间隔;"sgaps"：表示学习会话之间的间隔;"pcounts"：表示问题的出现次数 (_shft是移位版本)
         q, r = q.to(device), r.to(device)
         emb_type = self.emb_type
         if emb_type == "qid":
@@ -39,7 +40,7 @@ class DKTForget(Module):
         return y
 
 class CIntegration(Module):
-    def __int__(self, num_rgap, num_sgap, num_pcount, emb_dim) -> None:
+    def __init__(self, num_rgap, num_sgap, num_pcount, emb_dim) -> None:
         super().__init__()
         self.rgap_eye = torch.eye(num_rgap)
         self.sgap_eye = torch.eye(num_sgap)
