@@ -30,11 +30,18 @@ def process_raw_data(dataset_name, dname2paths):
         from .assist2015_preprocess import read_data_from_csv
     elif dataset_name == "assist2009":
         from .assist2009_preprocess import read_data_from_csv
+    # elif dataset_name =='junyi2015':
+    #     from .junyi2015_preprocess import read_data_from_csv, load_q2c
+    elif dataset_name == "assist2012":
+        from .assist2012_preprocess import read_data_from_csv
     else:
         pass
     #  数据集处理逻辑
-    if dataset_name=="":
+    if dataset_name=="junyi2015":
         pass
-    read_data_from_csv(read_path,writef) # csv / txt
+        # dq2c = load_q2c(read_path.replace("junyi_ProblemLog_original.csv", "junyi_Exercise_table.csv"))
+        # read_data_from_csv(read_path, writef, dq2c)
+    else:
+        read_data_from_csv(read_path,writef) # csv / txt
 
     return dname, writef

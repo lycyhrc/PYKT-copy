@@ -11,7 +11,9 @@ dname2paths = {
     "statics2011": "../data/statics2011/AllData_student_step_2011F.csv",
     "poj": "../data/poj/poj_log.csv",
     "assist2015": "../data/assist2015/2015_100_skill_builders_main_problems.csv",
-    "assist2009": "../data/assist2009/skill_builder_data_corrected_collapsed.csv"
+    "assist2009": "../data/assist2009/skill_builder_data_corrected_collapsed.csv",
+    # "junyi2015": "../data/junyi2015/junyi_ProblemLog_original.csv"
+    "assist2012":"../data/assist2012/2012-2013-data-with-predictions-4-final.csv"
 }
 
 # 项目的数据配置json文件
