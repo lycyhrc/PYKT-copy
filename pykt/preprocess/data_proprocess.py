@@ -36,6 +36,8 @@ def process_raw_data(dataset_name, dname2paths):
         from .assist2012_preprocess import read_data_from_csv
     elif dataset_name == "algebra2005":
         from .algebra2005_preprocess import read_data_from_csv
+    elif dataset_name == "bridge2006":
+        from .bridge2006_preprocess import read_data_from_csv
     else:
         pass
     #  数据集处理逻辑

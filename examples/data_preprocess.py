@@ -14,7 +14,8 @@ dname2paths = {
     "assist2009": "../data/assist2009/skill_builder_data_corrected_collapsed.csv",
     # "junyi2015": "../data/junyi2015/junyi_ProblemLog_original.csv"
     "assist2012":"../data/assist2012/2012-2013-data-with-predictions-4-final.csv",
-    "algebra2005":"../data/algebra2005/algebra_2005_2006_train.txt"
+    "algebra2005":"../data/algebra2005/algebra_2005_2006_train.txt",
+    "bridge2006": "../data/bridge2006/bridge_to_algebra_2006_2007_train.txt"
   } 
 
 # 项目的数据配置json文件
