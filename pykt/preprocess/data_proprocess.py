@@ -34,6 +34,8 @@ def process_raw_data(dataset_name, dname2paths):
     #     from .junyi2015_preprocess import read_data_from_csv, load_q2c
     elif dataset_name == "assist2012":
         from .assist2012_preprocess import read_data_from_csv
+    elif dataset_name == "algebra2005":
+        from .algebra2005_preprocess import read_data_from_csv
     else:
         pass
     #  数据集处理逻辑
